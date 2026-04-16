@@ -1,0 +1,45 @@
+// Per-family ingestion outputs: descriptions pulled from the sibling
+// DESCRIPTION.en_us.html, and filename cross-check reports that
+// compare a METADATA.pb's fonts[*].filename list against the actual
+// binaries in the same directory.
+
+syntax = "proto3";
+
+package openformat.v1;
+
+option go_package = "openformat/gen/go/openformat/v1;openformatv1";
+
+// Raw + plain-text view of a DESCRIPTION.en_us.html file. These live
+// alongside METADATA.pb in each google/fonts family directory and
+// carry the editorial blurb shown on fonts.google.com.
+message FamilyDescription {
+  // Absolute path the description was loaded from.
+  string path = 1;
+  // Verbatim file contents.
+  bytes raw_html = 2;
+  // Best-effort HTML tag stripping + whitespace collapse. Not intended
+  // to reproduce the formatted output; just for search / preview.
+  string plain_text = 3;
+}
+
+// Result of cross-checking a METADATA.pb's declared filenames against
+// the binaries that actually exist in the family directory.
+message FamilyFilenameCheck {
+  // Family directory the check ran against.
+  string family_dir = 1;
+  // Entries that resolved: filename declared in METADATA and present on
+  // disk.
+  repeated ResolvedBinary resolved = 2;
+  // Filenames declared in METADATA.pb's fonts[*].filename but NOT found
+  // on disk.
+  repeated string missing = 3;
+  // Font binaries present on disk (.ttf / .otf) but NOT referenced by
+  // any METADATA.pb entry.
+  repeated string orphan = 4;
+}
+
+message ResolvedBinary {
+  // Filename relative to the family directory, verbatim from METADATA.
+  string filename = 1;
+  int64  size_bytes = 2;
+}

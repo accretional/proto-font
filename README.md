@@ -343,10 +343,19 @@ Append as new work comes up.
   backward-compatible.
 - **`METADATA.pb` ingestion** *(done — see `METADATA-IMPORT-LOG.md`)*:
   `internal/metadata` parses + validates the text-protos from
-  `google/fonts`. Follow-up: cross-check `fonts[*].filename` against the
-  actual binaries in the same family directory, ingest the sibling
-  `DESCRIPTION.en_us.html`, and read the `axisregistry` per-axis
-  `.textproto` records.
+  `google/fonts`, and the three follow-ups have now landed:
+  - `CheckFilenames` / `CheckFamilyDir` cross-check each METADATA
+    `fonts[*].filename` against the real `.ttf`/`.otf` binaries in the
+    family directory, reporting resolved/missing/orphan sets into a
+    `FamilyFilenameCheck` proto.
+  - `LoadDescription` reads `DESCRIPTION.en_us.html` and returns a
+    `FamilyDescription` with raw HTML + best-effort plain text.
+  - `LoadAxisRegistry` parses every `.textproto` under
+    `axisregistry/Lib/axisregistry/data/` into the vendored
+    `googlefonts.AxisProto`.
+  The corpus-backed tests (`TestCheckFilenamesCorpus`,
+  `TestLoadDescriptionCorpus`, `TestLoadAxisRegistry`) run against the
+  `SETUP_FULL=1` google/fonts clone and skip when it's absent.
 - **Material Design Icons ingestion**: README asks to "get the fonts out
   of https://github.com/google/material-design-icons". `setup.sh` does
   not fetch them today — add a fixture pull if we want to validate
