@@ -35,6 +35,7 @@ go.work.sum
 data/fonts/noto/
 data/fonts/gfonts/
 data/fonts/material-symbols/
+data/fonts/colr/
 data/metadata/
 *.tmp
 

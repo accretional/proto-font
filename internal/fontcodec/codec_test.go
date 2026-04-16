@@ -547,6 +547,54 @@ func TestEOTEncodeRoundTrip(t *testing.T) {
 	}
 }
 
+// TestColrCpalFixturePresent confirms the fetched Bungee fixtures actually
+// carry COLR + CPAL tables. Without this, the fixture's value (exercising
+// the colour-table tags) would be invisible — they currently ride as opaque
+// SfntTable.raw_data, so a regression that dropped them on round-trip would
+// only surface as a bytewise mismatch in the validation sweep, not as a
+// targeted signal.
+func TestColrCpalFixturePresent(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	colrDir := filepath.Join(filepath.Dir(file), "..", "..", "data", "fonts", "colr")
+	cases := []struct{ name, path string }{
+		{"BungeeColor (COLRv0)", filepath.Join(colrDir, "BungeeColor-Regular.ttf")},
+		{"BungeeSpice (COLRv1)", filepath.Join(colrDir, "BungeeSpice-Regular.ttf")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			raw, err := os.ReadFile(tc.path)
+			if err != nil {
+				t.Skipf("fixture absent (%v) — run ./setup.sh", err)
+			}
+			m, err := Decode(raw)
+			if err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			sfnt := m.GetFile().GetSfnt()
+			if sfnt == nil {
+				t.Fatal("not SFNT")
+			}
+			seen := map[string]bool{}
+			for _, tb := range sfnt.GetTables() {
+				seen[tb.GetTag()] = true
+			}
+			for _, tag := range []string{"COLR", "CPAL"} {
+				if !seen[tag] {
+					t.Errorf("missing %q table; saw tags %v", tag, sortedKeys(seen))
+				}
+			}
+		})
+	}
+}
+
+func sortedKeys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
 func TestDetectFlavor(t *testing.T) {
 	cases := []struct {
 		name string

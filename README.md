@@ -260,6 +260,11 @@ screenshots the page. Committed reference renders:
 | Noto Sans VF         | ![Noto Sans VF](screenshots/NotoSans-VF.png)           |
 | Noto Sans Mono VF    | ![Noto Sans Mono VF](screenshots/NotoSansMono-VF.png)  |
 | Noto Serif VF        | ![Noto Serif VF](screenshots/NotoSerif-VF.png)         |
+| Material Symbols Outlined | ![Material Symbols Outlined](screenshots/MaterialSymbolsOutlined-VF.png) |
+| Material Symbols Rounded  | ![Material Symbols Rounded](screenshots/MaterialSymbolsRounded-VF.png)  |
+| Material Symbols Sharp    | ![Material Symbols Sharp](screenshots/MaterialSymbolsSharp-VF.png)      |
+| Bungee Color (COLRv0)| ![Bungee Color](screenshots/BungeeColor-Regular.png)   |
+| Bungee Spice (COLRv1)| ![Bungee Spice](screenshots/BungeeSpice-Regular.png)   |
 | TestOTF (fonttools)  | ![TestOTF](screenshots/TestOTF.png)                    |
 | TestWOFF (fonttools) | ![TestWOFF](screenshots/TestWOFF.png)                  |
 | TestWOFF2 (fonttools)| ![TestWOFF2](screenshots/TestWOFF2.png)                |
@@ -363,8 +368,14 @@ Append as new work comes up.
   + benchmarks; round-trip parity holds for all four. They stress the
   variation tables (`fvar`/`avar`/`STAT`/`HVAR`/`MVAR`/`gvar`) much
   harder than the two-axis Noto fixtures and give us our first
-  non-fonttools-test WOFF2. Follow-up: a colour-table sample
-  (`COLR`/`CPAL`) is still missing — Material Symbols is monochrome.
+  non-fonttools-test WOFF2.
+- **Colour-table fixtures** *(landed — fixtures pulled into
+  `data/fonts/colr/`)*: `BungeeColor-Regular.ttf` (COLR v0 layered
+  glyphs + CPAL palette) and `BungeeSpice-Regular.ttf` (COLR v1
+  paint-graph with gradients) from `google/fonts`. Auto-included by
+  the validation sweep; `TestColrCpalFixturePresent` asserts both
+  tags survive Decode. Bytes still ride in `SfntTable.raw_data` —
+  gluon will fill in structured COLR/CPAL parsers later.
 - **`lang` data files**: we vendor the schema, not the `.textproto` data.
   If `gfapi` gains a "fonts covering language X" helper we need to pull
   the data.

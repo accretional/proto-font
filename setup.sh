@@ -254,6 +254,21 @@ download_if_missing \
   "$MDI_BASE/MaterialSymbolsOutlined${MDI_AXES}.woff2" \
   "$MATERIAL_DIR/MaterialSymbolsOutlined-VF.woff2"
 
+# Colour-table fixtures from google/fonts. Bungee Color is a tiny COLR v0
+# layered-glyph + CPAL palette font (~75KB); Bungee Spice is the COLR v1
+# gradient variant (~1.5MB). Together they exercise both the legacy
+# layered renderer and the modern paint-graph format. Bytes still ride in
+# SfntTable.raw_data (gluon will fill in COLR/CPAL parsers later) — the
+# value here is purely round-trip coverage of those table tags.
+COLR_DIR="$ROOT/data/fonts/colr"
+mkdir -p "$COLR_DIR"
+download_if_missing \
+  "https://raw.githubusercontent.com/google/fonts/main/ofl/bungeecolor/BungeeColor-Regular.ttf" \
+  "$COLR_DIR/BungeeColor-Regular.ttf"
+download_if_missing \
+  "https://raw.githubusercontent.com/google/fonts/main/ofl/bungeespice/BungeeSpice-Regular.ttf" \
+  "$COLR_DIR/BungeeSpice-Regular.ttf"
+
 # METADATA.pb text-protos, one per family. Covers variable axes, Noto
 # flag, ofl vs apache licensing, display/monospace categories, material
 # symbols (display-only).
