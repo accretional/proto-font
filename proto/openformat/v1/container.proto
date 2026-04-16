@@ -137,8 +137,10 @@ message WoffTable {
 //  WOFF 2.0
 // ------------------------------------------------------------------
 //
-// File-level structure only. Brotli decode + per-table transform
-// reversal are deferred — see README NEXT STEPS.
+// Header + table directory + brotli-decompressed per-table bytes.
+// `glyf` and `loca` are still emitted in their transformed form
+// (per W3C WOFF2 spec §5.1) — reversing the transform is a separate
+// pass; see README NEXT STEPS.
 
 message Woff2Font {
   uint32 signature = 1;           // 'wOF2'
@@ -164,9 +166,12 @@ message Woff2Font {
 
 message Woff2TableDirectoryEntry {
   uint32 flags = 1;            // low 6 bits = tag index, top 2 = transform
-  uint32 tag = 2;              // present when flags tag index == 63
+  uint32 tag = 2;              // wire-order four-char tag (always populated)
   uint32 orig_length = 3;      // 255UInt16
-  uint32 transform_length = 4; // present for glyf/loca transform
+  uint32 transform_length = 4; // present for transformed tables
+  string tag_str = 5;          // human-readable tag, e.g. "glyf"
+  bytes  data = 6;             // decompressed bytes for this table
+  bool   transformed = 7;      // true when `data` is in WOFF2-transformed form
 }
 
 message Woff2CollectionEntry {

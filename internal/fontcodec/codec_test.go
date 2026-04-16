@@ -3,6 +3,9 @@ package fontcodec
 import (
 	"bytes"
 	"encoding/binary"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -68,6 +71,62 @@ func TestRoundTripMinimalSfnt(t *testing.T) {
 	}
 	if !bytes.Equal(out2, raw) {
 		t.Errorf("synthesis round-trip mismatch:\n got %x\nwant %x", out2, raw)
+	}
+}
+
+// TestWOFF2DecodeStructured verifies the WOFF2 decoder populates the
+// structured table directory + decompressed per-table bytes (not just the
+// header + opaque compressed stream). Driven by the committed
+// data/fonts/handwritten/TestWOFF2.woff2 fixture.
+func TestWOFF2DecodeStructured(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	repoRoot := filepath.Join(filepath.Dir(file), "..", "..")
+	path := filepath.Join(repoRoot, "data", "fonts", "handwritten", "TestWOFF2.woff2")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Skipf("fixture missing: %v", err)
+	}
+	m, err := Decode(raw)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	w := m.File.GetWoff2()
+	if w == nil {
+		t.Fatal("no Woff2 body")
+	}
+	if got := uint32(len(w.TableDirectory)); got != w.NumTables {
+		t.Fatalf("TableDirectory len=%d, want NumTables=%d", got, w.NumTables)
+	}
+	// TestWOFF2.woff2 is a TrueType-flavoured font, so we expect head + glyf.
+	tags := map[string]*int{"head": nil, "glyf": nil, "loca": nil}
+	for i, e := range w.TableDirectory {
+		if e.TagStr == "" || e.Tag == 0 {
+			t.Errorf("entry %d missing tag (str=%q raw=%#x)", i, e.TagStr, e.Tag)
+		}
+		stored := e.OrigLength
+		if e.Transformed {
+			stored = e.TransformLength
+		}
+		if uint32(len(e.Data)) != stored {
+			t.Errorf("entry %d (%s): data len=%d, want stored=%d",
+				i, e.TagStr, len(e.Data), stored)
+		}
+		if _, want := tags[e.TagStr]; want {
+			i := i
+			tags[e.TagStr] = &i
+		}
+	}
+	for tag, ptr := range tags {
+		if ptr == nil {
+			t.Errorf("expected tag %q in directory", tag)
+		}
+	}
+	// glyf and loca should be in transformed form (no transform-version-3
+	// fonttools fixture).
+	for _, e := range w.TableDirectory {
+		if (e.TagStr == "glyf" || e.TagStr == "loca") && !e.Transformed {
+			t.Errorf("%s entry not flagged as transformed", e.TagStr)
+		}
 	}
 }
 

@@ -151,6 +151,11 @@ func decodeSFNT(raw []byte) (*pb.SfntFont, error) {
 		} else {
 			nextStart = len(raw)
 		}
+		// Malformed fonts can declare overlapping table extents; skip
+		// rather than panicking on a negative-length slice.
+		if tableEnd(e) > nextStart {
+			continue
+		}
 		pad := raw[tableEnd(e):nextStart]
 		if len(pad) > 0 && !allZero(pad) {
 			s.PostTablePadding[e.tag] = append([]byte(nil), pad...)
@@ -276,7 +281,7 @@ func zlibDecode(b []byte) ([]byte, error) {
 	return io.ReadAll(zr)
 }
 
-// --- WOFF 2.0 (structural only) ----------------------------------------------
+// --- WOFF 2.0 ----------------------------------------------------------------
 
 func decodeWOFF2(raw []byte) (*pb.Woff2Font, error) {
 	if len(raw) < 48 {
@@ -298,20 +303,47 @@ func decodeWOFF2(raw []byte) (*pb.Woff2Font, error) {
 		PrivOffset:          binary.BigEndian.Uint32(raw[40:44]),
 		PrivLength:          binary.BigEndian.Uint32(raw[44:48]),
 	}
-	// The per-table directory uses variable-length 255UInt16 encoding and
-	// transforms. We intentionally do not decode it here — the compressed
-	// stream is kept verbatim, which is sufficient for round-trip via
-	// RawBytes. Decoding the stream is a NEXT STEP (needs brotli).
-	// Preserve the compressed payload + optional metadata / private block.
-	// Offset of compressed stream = end of table directory; unknown without
-	// decoding 255UInt16. We approximate by snapshotting from meta offset.
-	if w.MetaOffset != 0 && int(w.MetaOffset) <= len(raw) {
-		w.CompressedStream = append([]byte(nil), raw[48:w.MetaOffset]...)
-	} else if w.PrivOffset != 0 && int(w.PrivOffset) <= len(raw) {
-		w.CompressedStream = append([]byte(nil), raw[48:w.PrivOffset]...)
-	} else {
-		w.CompressedStream = append([]byte(nil), raw[48:]...)
+
+	// Walk the variable-length table directory immediately after the
+	// header. Each entry is 1–9 bytes (1 flag + optional 4-byte tag +
+	// 1–3 byte 255UInt16 origLength + 1–3 byte 255UInt16 transformLength
+	// for transformed tables).
+	dir, dirLen, err := parseWoff2Directory(raw[48:], w.NumTables)
+	if err != nil {
+		return nil, err
 	}
+	w.TableDirectory = dir
+	streamStart := 48 + dirLen
+
+	// CollectionDirectory follows when flavor == 'ttcf'. We don't ship a
+	// WOFF2-collection fixture yet; bail explicitly so the gap is loud.
+	if w.Flavor == magicTTC {
+		return nil, fmt.Errorf("fontcodec: WOFF2 collections not yet supported")
+	}
+
+	// Compressed stream is exactly totalCompressedSize bytes when set,
+	// otherwise it runs to the start of the metadata or private blocks.
+	streamEnd := len(raw)
+	if w.TotalCompressedSize != 0 && streamStart+int(w.TotalCompressedSize) <= len(raw) {
+		streamEnd = streamStart + int(w.TotalCompressedSize)
+	} else if w.MetaOffset != 0 && int(w.MetaOffset) <= len(raw) {
+		streamEnd = int(w.MetaOffset)
+	} else if w.PrivOffset != 0 && int(w.PrivOffset) <= len(raw) {
+		streamEnd = int(w.PrivOffset)
+	}
+	if streamStart > streamEnd {
+		return nil, fmt.Errorf("fontcodec: WOFF2 directory overruns compressed stream")
+	}
+	w.CompressedStream = append([]byte(nil), raw[streamStart:streamEnd]...)
+
+	decompressed, err := brotliDecode(w.CompressedStream)
+	if err != nil {
+		return nil, fmt.Errorf("fontcodec: WOFF2 brotli decode: %w", err)
+	}
+	if err := sliceWoff2TableData(decompressed, w.TableDirectory); err != nil {
+		return nil, err
+	}
+
 	if w.MetaOffset != 0 && w.MetaLength != 0 {
 		end := int(w.MetaOffset) + int(w.MetaLength)
 		if end <= len(raw) {

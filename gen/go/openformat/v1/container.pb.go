@@ -972,9 +972,12 @@ func (x *Woff2Font) GetPrivateData() []byte {
 type Woff2TableDirectoryEntry struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Flags           uint32                 `protobuf:"varint,1,opt,name=flags,proto3" json:"flags,omitempty"`                                            // low 6 bits = tag index, top 2 = transform
-	Tag             uint32                 `protobuf:"varint,2,opt,name=tag,proto3" json:"tag,omitempty"`                                                // present when flags tag index == 63
+	Tag             uint32                 `protobuf:"varint,2,opt,name=tag,proto3" json:"tag,omitempty"`                                                // wire-order four-char tag (always populated)
 	OrigLength      uint32                 `protobuf:"varint,3,opt,name=orig_length,json=origLength,proto3" json:"orig_length,omitempty"`                // 255UInt16
-	TransformLength uint32                 `protobuf:"varint,4,opt,name=transform_length,json=transformLength,proto3" json:"transform_length,omitempty"` // present for glyf/loca transform
+	TransformLength uint32                 `protobuf:"varint,4,opt,name=transform_length,json=transformLength,proto3" json:"transform_length,omitempty"` // present for transformed tables
+	TagStr          string                 `protobuf:"bytes,5,opt,name=tag_str,json=tagStr,proto3" json:"tag_str,omitempty"`                             // human-readable tag, e.g. "glyf"
+	Data            []byte                 `protobuf:"bytes,6,opt,name=data,proto3" json:"data,omitempty"`                                               // decompressed bytes for this table
+	Transformed     bool                   `protobuf:"varint,7,opt,name=transformed,proto3" json:"transformed,omitempty"`                                // true when `data` is in WOFF2-transformed form
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1035,6 +1038,27 @@ func (x *Woff2TableDirectoryEntry) GetTransformLength() uint32 {
 		return x.TransformLength
 	}
 	return 0
+}
+
+func (x *Woff2TableDirectoryEntry) GetTagStr() string {
+	if x != nil {
+		return x.TagStr
+	}
+	return ""
+}
+
+func (x *Woff2TableDirectoryEntry) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *Woff2TableDirectoryEntry) GetTransformed() bool {
+	if x != nil {
+		return x.Transformed
+	}
+	return false
 }
 
 type Woff2CollectionEntry struct {
@@ -1443,13 +1467,16 @@ const file_openformat_v1_container_proto_rawDesc = "" +
 	"\x12collection_entries\x18\x10 \x03(\v2#.openformat.v1.Woff2CollectionEntryR\x11collectionEntries\x12+\n" +
 	"\x11compressed_stream\x18\x11 \x01(\fR\x10compressedStream\x12/\n" +
 	"\x13metadata_compressed\x18\x12 \x01(\fR\x12metadataCompressed\x12!\n" +
-	"\fprivate_data\x18\x13 \x01(\fR\vprivateData\"\x8e\x01\n" +
+	"\fprivate_data\x18\x13 \x01(\fR\vprivateData\"\xdd\x01\n" +
 	"\x18Woff2TableDirectoryEntry\x12\x14\n" +
 	"\x05flags\x18\x01 \x01(\rR\x05flags\x12\x10\n" +
 	"\x03tag\x18\x02 \x01(\rR\x03tag\x12\x1f\n" +
 	"\vorig_length\x18\x03 \x01(\rR\n" +
 	"origLength\x12)\n" +
-	"\x10transform_length\x18\x04 \x01(\rR\x0ftransformLength\"r\n" +
+	"\x10transform_length\x18\x04 \x01(\rR\x0ftransformLength\x12\x17\n" +
+	"\atag_str\x18\x05 \x01(\tR\x06tagStr\x12\x12\n" +
+	"\x04data\x18\x06 \x01(\fR\x04data\x12 \n" +
+	"\vtransformed\x18\a \x01(\bR\vtransformed\"r\n" +
 	"\x14Woff2CollectionEntry\x12\x1d\n" +
 	"\n" +
 	"num_tables\x18\x01 \x01(\rR\tnumTables\x12\x16\n" +
