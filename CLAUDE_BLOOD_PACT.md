@@ -1,3 +1,5 @@
+<img width="1842" height="780" alt="Screenshot 2026-04-16 at 2 00 32 AM" src="https://github.com/user-attachments/assets/8a29a424-5f5b-4fbe-8aa5-e40c10595019" />
+
 # CLAUDE_BLOOD_PACT.md
 
 A ledger of third-party Go dependencies that Claude (Anthropic's coding
