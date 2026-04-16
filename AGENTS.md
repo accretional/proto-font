@@ -21,6 +21,35 @@ Each script is a superset of the previous:
 `LET_IT_RIP → test → build → setup`. Do NOT commit or push without running
 `LET_IT_RIP.sh` successfully.
 
+## E2E screenshots (LET_IT_RIP only)
+
+`LET_IT_RIP.sh` finishes by rendering every web-loadable fixture under
+`data/fonts/` (`.ttf`/`.otf`/`.woff`/`.woff2`) in headless Chrome via the
+sibling [accretional/chromerpc](https://github.com/accretional/chromerpc)
+repo and writing a fresh PNG into `screenshots/` (top-level, not under
+`docs/`). The script:
+
+- Builds `chromerpc/bin/{chromerpc,automate}` if missing.
+- Reuses an existing `:50051` listener if one is up; otherwise starts a
+  headless chromerpc itself and stops it on exit.
+- Skips cleanly with `SKIP_SCREENSHOTS=1` when no Chrome / no sibling repo.
+- Override the sibling location with `CHROMERPC_REPO=/path/to/chromerpc`.
+
+**Validation rules — before committing or pushing:**
+
+1. Run `./LET_IT_RIP.sh` (this re-renders `screenshots/`).
+2. `git status` / `git diff -- screenshots/` to see which PNGs changed.
+3. Open every changed screenshot and confirm the rendering still looks
+   right. Pure metadata churn (a few bytes diff) is fine; a layout, font,
+   or glyph regression is not.
+4. **Whenever you add a new fixture under `data/fonts/`** or land a codec
+   change that could affect what the browser sees (table parsing,
+   transform handling, encoding), the new/affected screenshot is part of
+   the commit — review it visually, don't just trust that the test
+   passed.
+5. `.ttc` and `.eot` are intentionally not screenshotted — browsers
+   won't load them via `@font-face`.
+
 ## Toolchain
 
 - Go 1.26 (`go1.26`). Dev box has `go1.26.2`.

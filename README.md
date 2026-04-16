@@ -257,12 +257,12 @@ screenshots the page. Committed reference renders:
 
 | Family               | Sample                                                      |
 | -------------------- | ----------------------------------------------------------- |
-| Noto Sans VF         | ![Noto Sans VF](docs/screenshots/NotoSans-VF.png)           |
-| Noto Sans Mono VF    | ![Noto Sans Mono VF](docs/screenshots/NotoSansMono-VF.png)  |
-| Noto Serif VF        | ![Noto Serif VF](docs/screenshots/NotoSerif-VF.png)         |
-| TestOTF (fonttools)  | ![TestOTF](docs/screenshots/TestOTF.png)                    |
-| TestWOFF (fonttools) | ![TestWOFF](docs/screenshots/TestWOFF.png)                  |
-| TestWOFF2 (fonttools)| ![TestWOFF2](docs/screenshots/TestWOFF2.png)                |
+| Noto Sans VF         | ![Noto Sans VF](screenshots/NotoSans-VF.png)           |
+| Noto Sans Mono VF    | ![Noto Sans Mono VF](screenshots/NotoSansMono-VF.png)  |
+| Noto Serif VF        | ![Noto Serif VF](screenshots/NotoSerif-VF.png)         |
+| TestOTF (fonttools)  | ![TestOTF](screenshots/TestOTF.png)                    |
+| TestWOFF (fonttools) | ![TestWOFF](screenshots/TestWOFF.png)                  |
+| TestWOFF2 (fonttools)| ![TestWOFF2](screenshots/TestWOFF2.png)                |
 
 (`.ttc` and `.eot` are skipped — browsers don't load them via
 `@font-face`.)

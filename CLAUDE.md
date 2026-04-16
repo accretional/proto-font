@@ -11,6 +11,16 @@ sessions.
 - Never run `go test ./...` or `go build ./...` directly for CI-style
   validation — use the scripts.
 - Before committing or pushing: `./LET_IT_RIP.sh` must pass.
+- `./LET_IT_RIP.sh` also re-renders e2e screenshots into `screenshots/`
+  (top-level dir). It auto-builds and starts headless `chromerpc` from
+  `../chromerpc` if needed. Skip with `SKIP_SCREENSHOTS=1`. After the run,
+  `git diff -- screenshots/` and visually open every changed PNG — diffs
+  are expected when you add a fixture or change a codec/render path, but
+  you must confirm the rendering still looks right before pushing.
+- WOFF2 decode landed (header + variable-length directory + brotli
+  decompress + per-table data on `Woff2TableDirectoryEntry`). `glyf`/`loca`
+  remain in transformed form — see `transformed`/`transform_length` and
+  the `## NEXT STEPS` bullet.
 
 ## Proto
 
@@ -51,8 +61,10 @@ sessions.
   Everything else rides as opaque bytes — this keeps round-trip byte-for-byte
   while still exposing enough structure for the typical use cases.
 - WOFF 1.0 container is modelled (header + per-table compressed blocks +
-  metadata XML + private block). WOFF2 is deferred — it needs a brotli
-  decoder and per-table transform reversal; see `README.md` `## NEXT STEPS`.
+  metadata XML + private block). WOFF 2.0 is now modelled too (header +
+  255UInt16 directory + brotli-decompressed per-table bytes); the
+  `glyf`/`loca` transform reversal is the remaining gap — see
+  `README.md` `## NEXT STEPS`.
 - Collections (`.ttc`) are modelled as a top-level `FontCollection` wrapping
   repeated `SfntFont`.
 
