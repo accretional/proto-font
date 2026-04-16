@@ -50,6 +50,43 @@ func readUIntBase128(buf []byte) (uint32, int, error) {
 	return 0, 0, fmt.Errorf("UIntBase128: more than 5 bytes")
 }
 
+// writeUIntBase128 emits the minimal big-endian UIntBase128 encoding of v
+// (spec §6.1.1). Each byte carries 7 bits; the most-significant byte has
+// no continuation-bit set only on the final byte.
+func writeUIntBase128(v uint32) []byte {
+	if v == 0 {
+		return []byte{0}
+	}
+	var tmp [5]byte
+	n := 0
+	for x := v; x > 0; x >>= 7 {
+		tmp[n] = byte(x & 0x7f)
+		n++
+	}
+	out := make([]byte, n)
+	for i := 0; i < n; i++ {
+		out[i] = tmp[n-1-i]
+		if i < n-1 {
+			out[i] |= 0x80
+		}
+	}
+	return out
+}
+
+// write255UShort emits the minimal 255UInt16 encoding of v per spec §6.1.1.
+func write255UShort(v uint32) []byte {
+	switch {
+	case v < 253:
+		return []byte{byte(v)}
+	case v < 253+253:
+		return []byte{255, byte(v - 253)}
+	case v < 253+253+253:
+		return []byte{254, byte(v - 506)}
+	default:
+		return []byte{253, byte(v >> 8), byte(v)}
+	}
+}
+
 // read255UShort decodes one variable-length integer per W3C WOFF2 spec
 // §6.1.1. Returns the value and the number of bytes consumed.
 func read255UShort(buf []byte) (uint32, int, error) {

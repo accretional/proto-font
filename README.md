@@ -294,10 +294,15 @@ Append as new work comes up.
   `glyf` and `loca` entries). WOFF2 collections (`flavor == 'ttcf'`) are
   still explicitly rejected. Brotli dep:
   `github.com/andybalholm/brotli` (see `CLAUDE_BLOOD_PACT.md`).
-- **WOFF2 encode from structured fields**: still pending. We can re-emit
-  the brotli stream from `Woff2TableDirectoryEntry.data`, but a synthetic
-  encode path that drives from `untransformed_data` + recomputes the
-  transformed streams has not been written yet.
+- **WOFF2 encode from structured fields** *(landed)*: `encodeWOFF2`
+  rebuilds the container from `Woff2Font`. When a `glyf` entry carries
+  `untransformed_data` but empty `data`, the encoder synthesises the
+  spec §5.1 transform (seven sub-streams + optional overlap bitmap)
+  from the SFNT glyf + loca via `synthesizeWoff2Glyf`. `loca` is
+  emitted zero-length as the spec requires. Structural round-trip
+  (decode→encode→decode) is covered by
+  `TestWOFF2EncodeRoundTrip`; byte-exact vs the original is not a
+  goal since brotli is non-deterministic across encoders.
 - **TTC synthesis**: re-emitting a `.ttc` without `raw_bytes` means
   laying out shared table bodies across fonts. Not implemented; `Encode`
   errors out.
@@ -306,10 +311,14 @@ Append as new work comes up.
   bodies as opaque bytes. Adding structured parsers for format 4, 6, 10,
   12, 13, 14 would let callers read character coverage without hauling
   the raw table out.
-- **`head.checkSumAdjustment` recompute**: synthesis path copies the
-  declared value. For a truly synthetic font we should recompute per
-  OpenType §5.head (zero the field, checksum the whole file, subtract
-  from 0xB1B0AFBA).
+- **`head.checkSumAdjustment` recompute** *(landed)*: `encodeSFNT`
+  zeroes the field, sums every uint32 word across the whole laid-out
+  file, and writes `0xB1B0AFBA − sum` back. The head table's own
+  directory checksum is also computed with `checkSumAdjustment` zeroed
+  per OpenType §5.head. Only runs in the synthesis path — the
+  `raw_bytes` short-circuit in `Encode` still guarantees byte-exact
+  output for decoded files. Covered by
+  `TestHeadCheckSumAdjustmentRecompute`.
 - **Structured parsers for currently-stubbed tables**: the proto
   schema now reserves typed messages for `glyf`, `CFF`, `CFF2`, `GSUB`,
   `GPOS`, `GDEF`, `BASE`, `JSTF`, `MATH`, `fvar`, `avar`, `STAT`,

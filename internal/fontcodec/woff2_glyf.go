@@ -499,6 +499,473 @@ func packSimpleGlyph(nContours, xMin, yMin, xMax, yMax int16,
 	return out.Bytes(), nil
 }
 
+// synthesizeWoff2Glyf is the inverse of reverseWoff2GlyfTransform: given
+// plain SFNT glyf + loca bytes, it emits the WOFF2 §5.1 transformed
+// representation (header + seven sub-streams + optional overlap bitmap).
+// Byte-for-byte parity with a specific encoder (e.g. fonttools) is NOT
+// guaranteed — triplet selection and bbox-bitmap policy are encoder
+// choices — but round-trip through reverseWoff2GlyfTransform returns
+// the original bytes.
+func synthesizeWoff2Glyf(glyfBytes, locaBytes []byte, numGlyphs, indexFormat uint16) ([]byte, error) {
+	offsets := make([]uint32, numGlyphs+1)
+	if indexFormat == 0 {
+		if len(locaBytes) < int(numGlyphs+1)*2 {
+			return nil, fmt.Errorf("woff2 synth: short loca for %d glyphs (short)", numGlyphs)
+		}
+		for i := range offsets {
+			offsets[i] = uint32(binary.BigEndian.Uint16(locaBytes[i*2:i*2+2])) * 2
+		}
+	} else {
+		if len(locaBytes) < int(numGlyphs+1)*4 {
+			return nil, fmt.Errorf("woff2 synth: short loca for %d glyphs (long)", numGlyphs)
+		}
+		for i := range offsets {
+			offsets[i] = binary.BigEndian.Uint32(locaBytes[i*4 : i*4+4])
+		}
+	}
+
+	var (
+		nContourStream  bytes.Buffer
+		nPointsStream   bytes.Buffer
+		flagStream      bytes.Buffer
+		glyphStream     bytes.Buffer
+		compositeStream bytes.Buffer
+		bboxValues      bytes.Buffer
+		instStream      bytes.Buffer
+	)
+	bitmapLen := 4 * ((int(numGlyphs) + 31) / 32)
+	bboxBitmap := make([]byte, bitmapLen)
+	var overlapBitmap []byte
+	setBit := func(bmp []byte, i int) {
+		bmp[i>>3] |= 1 << (7 - (i & 7))
+	}
+
+	for i := uint16(0); i < numGlyphs; i++ {
+		start := offsets[i]
+		end := offsets[i+1]
+		if end < start || int(end) > len(glyfBytes) {
+			return nil, fmt.Errorf("woff2 synth: glyph %d offsets out of range", i)
+		}
+		body := glyfBytes[start:end]
+
+		if len(body) == 0 {
+			_ = binary.Write(&nContourStream, binary.BigEndian, int16(0))
+			continue
+		}
+		if len(body) < 10 {
+			return nil, fmt.Errorf("woff2 synth: glyph %d body too short (%d)", i, len(body))
+		}
+		nContours := int16(binary.BigEndian.Uint16(body[0:2]))
+		xMin := int16(binary.BigEndian.Uint16(body[2:4]))
+		yMin := int16(binary.BigEndian.Uint16(body[4:6]))
+		xMax := int16(binary.BigEndian.Uint16(body[6:8]))
+		yMax := int16(binary.BigEndian.Uint16(body[8:10]))
+		_ = binary.Write(&nContourStream, binary.BigEndian, nContours)
+
+		switch {
+		case nContours > 0:
+			endPts, insts, dxs, dys, onCurves, overlap, err := parseSfntSimpleGlyph(body)
+			if err != nil {
+				return nil, fmt.Errorf("woff2 synth: glyph %d: %w", i, err)
+			}
+			// nPointsStream: one 255UInt16 per contour, count of points.
+			prev := -1
+			for _, e := range endPts {
+				count := int(e) - prev
+				prev = int(e)
+				nPointsStream.Write(write255UShort(uint32(count)))
+			}
+			// Encode bbox: include explicit bbox only if computed doesn't
+			// match header (fonttools-compatible policy).
+			if !simpleBboxMatches(dxs, dys, xMin, yMin, xMax, yMax) {
+				setBit(bboxBitmap, int(i))
+				_ = binary.Write(&bboxValues, binary.BigEndian, xMin)
+				_ = binary.Write(&bboxValues, binary.BigEndian, yMin)
+				_ = binary.Write(&bboxValues, binary.BigEndian, xMax)
+				_ = binary.Write(&bboxValues, binary.BigEndian, yMax)
+			}
+			for p := 0; p < len(dxs); p++ {
+				idx, tbytes, err := encodeTriplet(dxs[p], dys[p])
+				if err != nil {
+					return nil, fmt.Errorf("woff2 synth: glyph %d point %d: %w", i, p, err)
+				}
+				fb := byte(idx & 0x7f)
+				if !onCurves[p] {
+					fb |= 0x80
+				}
+				flagStream.WriteByte(fb)
+				glyphStream.Write(tbytes)
+			}
+			glyphStream.Write(write255UShort(uint32(len(insts))))
+			instStream.Write(insts)
+			if overlap {
+				if overlapBitmap == nil {
+					overlapBitmap = make([]byte, bitmapLen)
+				}
+				setBit(overlapBitmap, int(i))
+			}
+		case nContours == -1:
+			setBit(bboxBitmap, int(i))
+			_ = binary.Write(&bboxValues, binary.BigEndian, xMin)
+			_ = binary.Write(&bboxValues, binary.BigEndian, yMin)
+			_ = binary.Write(&bboxValues, binary.BigEndian, xMax)
+			_ = binary.Write(&bboxValues, binary.BigEndian, yMax)
+			compBytes, insts, haveInst, err := parseSfntCompositeGlyph(body)
+			if err != nil {
+				return nil, fmt.Errorf("woff2 synth: glyph %d composite: %w", i, err)
+			}
+			compositeStream.Write(compBytes)
+			if haveInst {
+				glyphStream.Write(write255UShort(uint32(len(insts))))
+				instStream.Write(insts)
+			}
+		default:
+			return nil, fmt.Errorf("woff2 synth: glyph %d has unexpected nContours=%d", i, nContours)
+		}
+	}
+
+	optionFlags := uint16(0)
+	if overlapBitmap != nil {
+		optionFlags = 1
+	}
+	bboxStreamLen := uint32(len(bboxBitmap)) + uint32(bboxValues.Len())
+
+	var out bytes.Buffer
+	_ = binary.Write(&out, binary.BigEndian, uint16(0)) // reserved
+	_ = binary.Write(&out, binary.BigEndian, optionFlags)
+	_ = binary.Write(&out, binary.BigEndian, numGlyphs)
+	_ = binary.Write(&out, binary.BigEndian, indexFormat)
+	_ = binary.Write(&out, binary.BigEndian, uint32(nContourStream.Len()))
+	_ = binary.Write(&out, binary.BigEndian, uint32(nPointsStream.Len()))
+	_ = binary.Write(&out, binary.BigEndian, uint32(flagStream.Len()))
+	_ = binary.Write(&out, binary.BigEndian, uint32(glyphStream.Len()))
+	_ = binary.Write(&out, binary.BigEndian, uint32(compositeStream.Len()))
+	_ = binary.Write(&out, binary.BigEndian, bboxStreamLen)
+	_ = binary.Write(&out, binary.BigEndian, uint32(instStream.Len()))
+
+	out.Write(nContourStream.Bytes())
+	out.Write(nPointsStream.Bytes())
+	out.Write(flagStream.Bytes())
+	out.Write(glyphStream.Bytes())
+	out.Write(compositeStream.Bytes())
+	out.Write(bboxBitmap)
+	out.Write(bboxValues.Bytes())
+	out.Write(instStream.Bytes())
+	if overlapBitmap != nil {
+		out.Write(overlapBitmap)
+	}
+	return out.Bytes(), nil
+}
+
+func simpleBboxMatches(dxs, dys []int16, xMin, yMin, xMax, yMax int16) bool {
+	if len(dxs) == 0 {
+		return xMin == 0 && yMin == 0 && xMax == 0 && yMax == 0
+	}
+	var cx, cy, mx, Mx, my, My int16
+	cx, cy = dxs[0], dys[0]
+	mx, Mx, my, My = cx, cx, cy, cy
+	for i := 1; i < len(dxs); i++ {
+		cx += dxs[i]
+		cy += dys[i]
+		if cx < mx {
+			mx = cx
+		}
+		if cx > Mx {
+			Mx = cx
+		}
+		if cy < my {
+			my = cy
+		}
+		if cy > My {
+			My = cy
+		}
+	}
+	return mx == xMin && Mx == xMax && my == yMin && My == yMax
+}
+
+// parseSfntSimpleGlyph reads a standard SFNT simple glyph body into its
+// per-point deltas. Used by synthesizeWoff2Glyf.
+func parseSfntSimpleGlyph(body []byte) (endPts []uint16, insts []byte,
+	dxs, dys []int16, onCurves []bool, overlap bool, err error) {
+	if len(body) < 10 {
+		err = fmt.Errorf("simple glyph: header too short")
+		return
+	}
+	nContours := int16(binary.BigEndian.Uint16(body[0:2]))
+	if nContours <= 0 {
+		err = fmt.Errorf("simple glyph: nContours=%d", nContours)
+		return
+	}
+	pos := 10
+	endPts = make([]uint16, nContours)
+	for i := range endPts {
+		if pos+2 > len(body) {
+			err = fmt.Errorf("simple glyph: endpts truncated")
+			return
+		}
+		endPts[i] = binary.BigEndian.Uint16(body[pos : pos+2])
+		pos += 2
+	}
+	totalPoints := int(endPts[nContours-1]) + 1
+	if pos+2 > len(body) {
+		err = fmt.Errorf("simple glyph: instLen truncated")
+		return
+	}
+	instLen := int(binary.BigEndian.Uint16(body[pos : pos+2]))
+	pos += 2
+	if pos+instLen > len(body) {
+		err = fmt.Errorf("simple glyph: instructions truncated")
+		return
+	}
+	insts = append([]byte(nil), body[pos:pos+instLen]...)
+	pos += instLen
+
+	flags := make([]byte, 0, totalPoints)
+	for len(flags) < totalPoints {
+		if pos >= len(body) {
+			err = fmt.Errorf("simple glyph: flags truncated")
+			return
+		}
+		f := body[pos]
+		pos++
+		flags = append(flags, f)
+		if f&0x08 != 0 {
+			if pos >= len(body) {
+				err = fmt.Errorf("simple glyph: repeat count missing")
+				return
+			}
+			runLen := int(body[pos])
+			pos++
+			for j := 0; j < runLen && len(flags) < totalPoints; j++ {
+				flags = append(flags, f)
+			}
+		}
+	}
+	dxs = make([]int16, totalPoints)
+	for i := 0; i < totalPoints; i++ {
+		f := flags[i]
+		switch {
+		case f&0x02 != 0:
+			if pos >= len(body) {
+				err = fmt.Errorf("simple glyph: x short truncated")
+				return
+			}
+			v := int16(body[pos])
+			pos++
+			if f&0x10 != 0 {
+				dxs[i] = v
+			} else {
+				dxs[i] = -v
+			}
+		case f&0x10 != 0:
+			dxs[i] = 0
+		default:
+			if pos+2 > len(body) {
+				err = fmt.Errorf("simple glyph: x long truncated")
+				return
+			}
+			dxs[i] = int16(binary.BigEndian.Uint16(body[pos : pos+2]))
+			pos += 2
+		}
+	}
+	dys = make([]int16, totalPoints)
+	for i := 0; i < totalPoints; i++ {
+		f := flags[i]
+		switch {
+		case f&0x04 != 0:
+			if pos >= len(body) {
+				err = fmt.Errorf("simple glyph: y short truncated")
+				return
+			}
+			v := int16(body[pos])
+			pos++
+			if f&0x20 != 0 {
+				dys[i] = v
+			} else {
+				dys[i] = -v
+			}
+		case f&0x20 != 0:
+			dys[i] = 0
+		default:
+			if pos+2 > len(body) {
+				err = fmt.Errorf("simple glyph: y long truncated")
+				return
+			}
+			dys[i] = int16(binary.BigEndian.Uint16(body[pos : pos+2]))
+			pos += 2
+		}
+	}
+	onCurves = make([]bool, totalPoints)
+	for i, f := range flags {
+		onCurves[i] = f&0x01 != 0
+	}
+	if len(flags) > 0 {
+		overlap = flags[0]&0x40 != 0
+	}
+	return
+}
+
+// parseSfntCompositeGlyph walks component records in a composite glyph
+// body and returns the raw component bytes, instruction bytes (if any),
+// and whether WE_HAVE_INSTRUCTIONS was set on any component.
+func parseSfntCompositeGlyph(body []byte) (components, instructions []byte, haveInstructions bool, err error) {
+	if len(body) < 10 {
+		err = fmt.Errorf("composite glyph: header truncated")
+		return
+	}
+	pos := 10
+	start := pos
+	for {
+		if pos+4 > len(body) {
+			err = fmt.Errorf("composite glyph: component header truncated")
+			return
+		}
+		flag := binary.BigEndian.Uint16(body[pos : pos+2])
+		pos += 4
+		argSize := 2
+		if flag&cmpArg1And2AreWords != 0 {
+			argSize = 4
+		}
+		scaleSize := 0
+		switch {
+		case flag&cmpWeHaveATwoByTwo != 0:
+			scaleSize = 8
+		case flag&cmpWeHaveAnXAndYScale != 0:
+			scaleSize = 4
+		case flag&cmpWeHaveAScale != 0:
+			scaleSize = 2
+		}
+		if pos+argSize+scaleSize > len(body) {
+			err = fmt.Errorf("composite glyph: component body truncated")
+			return
+		}
+		pos += argSize + scaleSize
+		if flag&cmpWeHaveInstructions != 0 {
+			haveInstructions = true
+		}
+		if flag&cmpMoreComponents == 0 {
+			break
+		}
+	}
+	components = append([]byte(nil), body[start:pos]...)
+	if haveInstructions {
+		if pos+2 > len(body) {
+			err = fmt.Errorf("composite glyph: instLen truncated")
+			return
+		}
+		instLen := int(binary.BigEndian.Uint16(body[pos : pos+2]))
+		pos += 2
+		if pos+instLen > len(body) {
+			err = fmt.Errorf("composite glyph: instructions truncated")
+			return
+		}
+		instructions = append([]byte(nil), body[pos:pos+instLen]...)
+	}
+	return
+}
+
+// encodeTriplet picks the smallest triplet encoding for (dx, dy) and
+// returns the triplet flagIdx + coord bytes (byteCount-1 bytes).
+func encodeTriplet(dx, dy int16) (int, []byte, error) {
+	abs := func(v int16) int16 {
+		if v < 0 {
+			return -v
+		}
+		return v
+	}
+	// 2-byte encodings: idx 0-9 (dx==0) and 10-19 (dy==0).
+	if dx == 0 {
+		ady := abs(dy)
+		for k := 0; k <= 4; k++ {
+			d := int16(k * 256)
+			if ady >= d && ady <= d+255 {
+				val := byte(ady - d)
+				sign := 0
+				if dy >= 0 {
+					sign = 1
+				}
+				return k*2 + sign, []byte{val}, nil
+			}
+		}
+	}
+	if dy == 0 && dx != 0 {
+		adx := abs(dx)
+		for k := 0; k <= 4; k++ {
+			d := int16(k * 256)
+			if adx >= d && adx <= d+255 {
+				val := byte(adx - d)
+				sign := 0
+				if dx >= 0 {
+					sign = 1
+				}
+				return 10 + k*2 + sign, []byte{val}, nil
+			}
+		}
+	}
+	// idx 20-83: 4+4 bits, both axes nonzero, |dx|,|dy| in [1, 64].
+	if dx != 0 && dy != 0 && abs(dx) <= 64 && abs(dy) <= 64 {
+		adx := int(abs(dx))
+		ady := int(abs(dy))
+		dxCell := (adx - 1) / 16
+		dyCell := (ady - 1) / 16
+		si := 0
+		if dx > 0 {
+			si |= 1
+		}
+		if dy > 0 {
+			si |= 2
+		}
+		valX := byte(adx - (dxCell*16 + 1))
+		valY := byte(ady - (dyCell*16 + 1))
+		return 20 + (dyCell*4+dxCell)*4 + si, []byte{(valX << 4) | valY}, nil
+	}
+	// idx 84-119: 8+8 bits, |dx|,|dy| in [1, 768].
+	if dx != 0 && dy != 0 && abs(dx) <= 768 && abs(dy) <= 768 {
+		adx := int(abs(dx))
+		ady := int(abs(dy))
+		dxCell := (adx - 1) / 256
+		dyCell := (ady - 1) / 256
+		si := 0
+		if dx > 0 {
+			si |= 1
+		}
+		if dy > 0 {
+			si |= 2
+		}
+		valX := byte(adx - (dxCell*256 + 1))
+		valY := byte(ady - (dyCell*256 + 1))
+		return 84 + (dyCell*3+dxCell)*4 + si, []byte{valX, valY}, nil
+	}
+	// idx 120-123: 12+12 bits packed.
+	if abs(dx) <= 4095 && abs(dy) <= 4095 {
+		adx := uint32(abs(dx))
+		ady := uint32(abs(dy))
+		si := 0
+		if dx > 0 {
+			si |= 1
+		}
+		if dy > 0 {
+			si |= 2
+		}
+		packed := (adx&0xfff)<<12 | (ady & 0xfff)
+		return 120 + si, []byte{byte(packed >> 16), byte(packed >> 8), byte(packed)}, nil
+	}
+	// idx 124-127: 16+16.
+	si := 0
+	if dx > 0 {
+		si |= 1
+	}
+	if dy > 0 {
+		si |= 2
+	}
+	adx := uint16(abs(dx))
+	ady := uint16(abs(dy))
+	buf := make([]byte, 4)
+	binary.BigEndian.PutUint16(buf[0:2], adx)
+	binary.BigEndian.PutUint16(buf[2:4], ady)
+	return 124 + si, buf, nil
+}
+
 func decodeCompositeGlyph(c *streamCursors) ([]byte, error) {
 	// Composite glyphs always carry an explicit bbox.
 	if c.bboxValCur+8 > len(c.bboxValues) {

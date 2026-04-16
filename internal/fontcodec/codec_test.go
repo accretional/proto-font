@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	pb "openformat/gen/go/openformat/v1"
 )
 
 // Minimal valid SFNT with a single fake "TEST" table. We hand-craft this
@@ -194,6 +196,179 @@ func TestWOFF2GlyfTransformReversal(t *testing.T) {
 	}
 	if locaEntry == nil || !bytes.Equal(locaEntry.data, wantLoca) {
 		t.Errorf("loca entry untransformed_data not wired")
+	}
+}
+
+// TestHeadCheckSumAdjustmentRecompute verifies that encodeSFNT
+// recomputes head.checkSumAdjustment per OpenType §5.head in the
+// synthesis path: zeroing the field and summing the whole file must
+// equal 0xB1B0AFBA.
+func TestHeadCheckSumAdjustmentRecompute(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	repoRoot := filepath.Join(filepath.Dir(file), "..", "..")
+	path := filepath.Join(repoRoot, "data", "fonts", "noto", "NotoSans-VF.ttf")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Skipf("fixture missing: %v", err)
+	}
+	m, err := Decode(raw)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	m.RawBytes = nil
+	out, err := Encode(m)
+	if err != nil {
+		t.Fatalf("Encode synth: %v", err)
+	}
+	// Locate head table's offset in the re-emitted file.
+	s := m.File.GetSfnt()
+	if s == nil {
+		t.Fatal("no Sfnt body")
+	}
+	// Parse the output's directory to find head.
+	numTables := int(binary.BigEndian.Uint16(out[4:6]))
+	var headOff uint32
+	for i := 0; i < numTables; i++ {
+		base := 12 + 16*i
+		tag := string(out[base : base+4])
+		if tag == "head" {
+			headOff = binary.BigEndian.Uint32(out[base+8 : base+12])
+			break
+		}
+	}
+	if headOff == 0 {
+		t.Fatal("head table not found in encoded output")
+	}
+	// Per spec: zero checkSumAdjustment, sum whole file, result must be 0xB1B0AFBA.
+	scratch := append([]byte(nil), out...)
+	binary.BigEndian.PutUint32(scratch[headOff+8:headOff+12], 0)
+	var sum uint32
+	for i := 0; i+4 <= len(scratch); i += 4 {
+		sum += binary.BigEndian.Uint32(scratch[i : i+4])
+	}
+	// Handle any trailing unaligned bytes.
+	if rem := len(scratch) % 4; rem != 0 {
+		var tail [4]byte
+		copy(tail[:], scratch[len(scratch)-rem:])
+		sum += binary.BigEndian.Uint32(tail[:])
+	}
+	adj := binary.BigEndian.Uint32(out[headOff+8 : headOff+12])
+	if sum+adj != 0xB1B0AFBA {
+		t.Errorf("checkSumAdjustment invariant broken: sum=%#x adj=%#x sum+adj=%#x want %#x",
+			sum, adj, sum+adj, uint32(0xB1B0AFBA))
+	}
+}
+
+// TestWOFF2GlyfSynthesisRoundTrip runs the encoder's
+// synthesizeWoff2Glyf over the fonttools reference glyf + loca and
+// verifies reverseWoff2GlyfTransform returns the same bytes. This is
+// the tightest loop for guarding the transform synthesiser.
+func TestWOFF2GlyfSynthesisRoundTrip(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	repoRoot := filepath.Join(filepath.Dir(file), "..", "..")
+	fixtures := filepath.Join(repoRoot, "data", "fonts", "handwritten")
+	glyfIn, err := os.ReadFile(filepath.Join(fixtures, "TestWOFF2.expected.glyf.bin"))
+	if err != nil {
+		t.Skipf("fixture missing: %v", err)
+	}
+	locaIn, err := os.ReadFile(filepath.Join(fixtures, "TestWOFF2.expected.loca.bin"))
+	if err != nil {
+		t.Fatalf("expected loca: %v", err)
+	}
+	// TestWOFF2.woff2 has 6 glyphs and short (indexFormat=0) loca.
+	const numGlyphs uint16 = 6
+	const indexFormat uint16 = 0
+	if want := int(numGlyphs+1) * 2; len(locaIn) != want {
+		t.Fatalf("loca sanity: got %d want %d", len(locaIn), want)
+	}
+
+	transformed, err := synthesizeWoff2Glyf(glyfIn, locaIn, numGlyphs, indexFormat)
+	if err != nil {
+		t.Fatalf("synthesizeWoff2Glyf: %v", err)
+	}
+	glyfOut, locaOut, idxFmt, err := reverseWoff2GlyfTransform(transformed)
+	if err != nil {
+		t.Fatalf("reverseWoff2GlyfTransform on synth output: %v", err)
+	}
+	if idxFmt != indexFormat {
+		t.Errorf("indexFormat round-trip: got %d want %d", idxFmt, indexFormat)
+	}
+	if !bytes.Equal(glyfOut, glyfIn) {
+		t.Errorf("glyf round-trip mismatch:\n got (%d) %x\nwant (%d) %x",
+			len(glyfOut), glyfOut, len(glyfIn), glyfIn)
+	}
+	if !bytes.Equal(locaOut, locaIn) {
+		t.Errorf("loca round-trip mismatch:\n got (%d) %x\nwant (%d) %x",
+			len(locaOut), locaOut, len(locaIn), locaIn)
+	}
+}
+
+// TestWOFF2EncodeRoundTrip decodes the fixture, clears raw_bytes,
+// re-encodes via the synthesis path, then re-decodes and verifies
+// structural equivalence. Byte-exact is not a goal because brotli is
+// non-deterministic across encoders.
+func TestWOFF2EncodeRoundTrip(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	repoRoot := filepath.Join(filepath.Dir(file), "..", "..")
+	path := filepath.Join(repoRoot, "data", "fonts", "handwritten", "TestWOFF2.woff2")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Skipf("fixture missing: %v", err)
+	}
+	m, err := Decode(raw)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	m.RawBytes = nil
+	out, err := Encode(m)
+	if err != nil {
+		t.Fatalf("Encode synth: %v", err)
+	}
+	m2, err := Decode(out)
+	if err != nil {
+		t.Fatalf("Decode of synth output: %v", err)
+	}
+	w1 := m.File.GetWoff2()
+	w2 := m2.File.GetWoff2()
+	if w1 == nil || w2 == nil {
+		t.Fatalf("missing Woff2 body after round-trip")
+	}
+	if w1.NumTables != w2.NumTables {
+		t.Fatalf("NumTables: got %d want %d", w2.NumTables, w1.NumTables)
+	}
+	if w1.Flavor != w2.Flavor {
+		t.Errorf("Flavor: got %#x want %#x", w2.Flavor, w1.Flavor)
+	}
+	origByTag := map[string]*pb.Woff2TableDirectoryEntry{}
+	for _, e := range w1.TableDirectory {
+		origByTag[e.TagStr] = e
+	}
+	for _, e := range w2.TableDirectory {
+		want, ok := origByTag[e.TagStr]
+		if !ok {
+			t.Errorf("unexpected tag in re-encoded directory: %s", e.TagStr)
+			continue
+		}
+		if e.OrigLength != want.OrigLength {
+			t.Errorf("%s OrigLength: got %d want %d", e.TagStr, e.OrigLength, want.OrigLength)
+		}
+		if e.Transformed != want.Transformed {
+			t.Errorf("%s Transformed: got %v want %v", e.TagStr, e.Transformed, want.Transformed)
+		}
+		if e.Transformed && e.TagStr != "loca" {
+			// Transform byte streams must match: encoder is deterministic
+			// for the transform itself (unlike brotli).
+			if !bytes.Equal(e.Data, want.Data) {
+				t.Errorf("%s transformed data mismatch (len got=%d want=%d)",
+					e.TagStr, len(e.Data), len(want.Data))
+			}
+		}
+		if want.Transformed && (want.TagStr == "glyf" || want.TagStr == "loca") {
+			if !bytes.Equal(e.UntransformedData, want.UntransformedData) {
+				t.Errorf("%s UntransformedData mismatch (len got=%d want=%d)",
+					e.TagStr, len(e.UntransformedData), len(want.UntransformedData))
+			}
+		}
 	}
 }
 

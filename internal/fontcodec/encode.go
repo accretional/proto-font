@@ -1,10 +1,13 @@
 package fontcodec
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"sort"
+
+	"github.com/andybalholm/brotli"
 
 	pb "openformat/gen/go/openformat/v1"
 )
@@ -142,17 +145,36 @@ func encodeSFNT(s *pb.SfntFont) ([]byte, error) {
 	binary.BigEndian.PutUint16(out[8:10], entrySelector)
 	binary.BigEndian.PutUint16(out[10:12], rangeShift)
 
-	// Directory entries.
+	// Directory entries. For the head table the directory checksum must
+	// be computed with checkSumAdjustment zeroed (OpenType §5.head).
 	for i, t := range dirOrder {
 		base := 12 + 16*i
 		binary.BigEndian.PutUint32(out[base:base+4], tagRaw(t.Tag))
 		checksum := t.Checksum
 		if checksum == 0 && len(t.RawData) > 0 {
-			checksum = sfntTableChecksum(t.RawData)
+			if t.Tag == "head" && len(t.RawData) >= 12 {
+				scratch := append([]byte(nil), t.RawData...)
+				binary.BigEndian.PutUint32(scratch[8:12], 0)
+				checksum = sfntTableChecksum(scratch)
+			} else {
+				checksum = sfntTableChecksum(t.RawData)
+			}
 		}
 		binary.BigEndian.PutUint32(out[base+4:base+8], checksum)
 		binary.BigEndian.PutUint32(out[base+8:base+12], offsets[t.Tag])
 		binary.BigEndian.PutUint32(out[base+12:base+16], lengths[t.Tag])
+	}
+
+	// Whole-file checkSumAdjustment (OpenType §5.head): zero the field,
+	// sum every uint32 word across the entire file, then write
+	// 0xB1B0AFBA − sum. We always recompute in the synthesis path so that
+	// any caller-side edits stay consistent; the raw_bytes short-circuit
+	// in Encode() preserves bit-exact output for decoded files.
+	if headOff, ok := offsets["head"]; ok && int(headOff)+12 <= len(out) {
+		binary.BigEndian.PutUint32(out[headOff+8:headOff+12], 0)
+		sum := sfntTableChecksum(out)
+		adj := uint32(0xB1B0AFBA) - sum
+		binary.BigEndian.PutUint32(out[headOff+8:headOff+12], adj)
 	}
 
 	return out, nil
@@ -268,10 +290,252 @@ func encodeWOFF1(w *pb.WoffFont) ([]byte, error) {
 	return out, nil
 }
 
-// --- WOFF 2.0 synthesis (placeholder) ----------------------------------------
+// --- WOFF 2.0 synthesis ------------------------------------------------------
 
+// encodeWOFF2 rebuilds a WOFF2 container from the structured proto. Each
+// directory entry must carry either `Data` (wire-form bytes — what the
+// decoder produced) or `UntransformedData` for glyf/loca (in which case
+// we synthesise the transform on-the-fly). All other tables are stored
+// verbatim.
+//
+// Byte-for-byte parity with the original file is NOT a goal: brotli is
+// non-deterministic across encoders, so we aim for structural
+// round-trip — decode(encode(p)) must match p.
 func encodeWOFF2(w *pb.Woff2Font) ([]byte, error) {
-	return nil, errors.New("fontcodec: WOFF2 synthesis without RawBytes is not supported yet")
+	if w == nil {
+		return nil, errors.New("fontcodec: nil Woff2Font")
+	}
+	if w.Flavor == magicTTC {
+		return nil, errors.New("fontcodec: WOFF2 collection synthesis not supported yet")
+	}
+
+	// Per-entry wire-form bytes: use Data if populated; otherwise
+	// synthesise glyf from untransformed_data. loca in WOFF2 is stored
+	// empty when transformed (its bytes live in the glyf transform), so
+	// Data for loca is expected to be zero-length.
+	type prepared struct {
+		entry *pb.Woff2TableDirectoryEntry
+		data  []byte
+	}
+	prep := make([]prepared, len(w.TableDirectory))
+	var glyfSynth, locaSynth []byte
+	for i, e := range w.TableDirectory {
+		prep[i] = prepared{entry: e, data: e.Data}
+	}
+	// When glyf is transformed but Data is empty and UntransformedData is
+	// present, synthesise the transform from SFNT glyf + loca.
+	glyfIdx, locaIdx := -1, -1
+	for i, e := range w.TableDirectory {
+		switch e.TagStr {
+		case "glyf":
+			glyfIdx = i
+		case "loca":
+			locaIdx = i
+		}
+	}
+	if glyfIdx >= 0 && prep[glyfIdx].entry.Transformed && len(prep[glyfIdx].data) == 0 {
+		g := prep[glyfIdx].entry
+		if len(g.UntransformedData) == 0 {
+			return nil, errors.New("fontcodec: WOFF2 glyf entry missing both Data and UntransformedData")
+		}
+		if locaIdx < 0 {
+			return nil, errors.New("fontcodec: WOFF2 glyf transform requires a loca entry")
+		}
+		loca := prep[locaIdx].entry.UntransformedData
+		// numGlyphs and indexFormat come from head/maxp; we rediscover
+		// indexFormat from loca length vs numGlyphs. Callers must set
+		// UntransformedData on loca consistently.
+		numGlyphs, indexFormat, err := deriveGlyphCount(w.TableDirectory, loca)
+		if err != nil {
+			return nil, fmt.Errorf("fontcodec: WOFF2 glyf synth: %w", err)
+		}
+		xformed, err := synthesizeWoff2Glyf(g.UntransformedData, loca, numGlyphs, indexFormat)
+		if err != nil {
+			return nil, fmt.Errorf("fontcodec: WOFF2 glyf synth: %w", err)
+		}
+		glyfSynth = xformed
+		prep[glyfIdx].data = glyfSynth
+		locaSynth = nil // WOFF2 stores transformed loca as zero-length
+		prep[locaIdx].data = locaSynth
+	}
+
+	// Directory: flags + optional 4-byte explicit tag + UIntBase128
+	// origLength + optional UIntBase128 transformLength.
+	var dir bytes.Buffer
+	for _, p := range prep {
+		e := p.entry
+		flags := byte(e.Flags)
+		tagIdx := flags & 0x3f
+		transformVer := flags >> 6
+		dir.WriteByte(flags)
+		if tagIdx == 63 {
+			var tag [4]byte
+			binary.BigEndian.PutUint32(tag[:], e.Tag)
+			dir.Write(tag[:])
+		}
+		origLen := e.OrigLength
+		if origLen == 0 {
+			// When synthesising we need a correct origLength; prefer
+			// UntransformedData length, falling back to Data length for
+			// non-transformed tables.
+			if len(e.UntransformedData) > 0 {
+				origLen = uint32(len(e.UntransformedData))
+			} else {
+				origLen = uint32(len(p.data))
+			}
+		}
+		dir.Write(writeUIntBase128(origLen))
+		if hasWoff2Transform(e.TagStr, transformVer) {
+			tlen := e.TransformLength
+			if tlen == 0 {
+				tlen = uint32(len(p.data))
+			}
+			dir.Write(writeUIntBase128(tlen))
+		}
+	}
+
+	// Concat per-entry data and brotli-compress.
+	var bodies bytes.Buffer
+	for _, p := range prep {
+		bodies.Write(p.data)
+	}
+	var compressed bytes.Buffer
+	bw := brotli.NewWriterLevel(&compressed, brotli.BestCompression)
+	if _, err := bw.Write(bodies.Bytes()); err != nil {
+		return nil, fmt.Errorf("fontcodec: brotli write: %w", err)
+	}
+	if err := bw.Close(); err != nil {
+		return nil, fmt.Errorf("fontcodec: brotli close: %w", err)
+	}
+
+	// Layout: header (48) + directory + compressed stream + metadata + private.
+	headerSize := 48
+	dirBytes := dir.Bytes()
+	compressedBytes := compressed.Bytes()
+	// Pad compressed stream to 4-byte boundary before metadata / private.
+	tail := headerSize + len(dirBytes) + len(compressedBytes)
+	padLen := 0
+	if r := tail % 4; r != 0 && (len(w.MetadataCompressed) > 0 || len(w.PrivateData) > 0) {
+		padLen = 4 - r
+	}
+	metaOffset := uint32(0)
+	privOffset := uint32(0)
+	if len(w.MetadataCompressed) > 0 {
+		metaOffset = uint32(tail + padLen)
+	}
+	if len(w.PrivateData) > 0 {
+		off := tail + padLen + len(w.MetadataCompressed)
+		// Metadata block is also padded to 4-byte boundary before private.
+		if r := off % 4; r != 0 {
+			off += 4 - r
+		}
+		privOffset = uint32(off)
+	}
+
+	total := tail + padLen + len(w.MetadataCompressed)
+	if privOffset > 0 {
+		total = int(privOffset) + len(w.PrivateData)
+	}
+
+	out := make([]byte, headerSize, total)
+	sig := w.Signature
+	if sig == 0 {
+		sig = magicWOFF2
+	}
+	binary.BigEndian.PutUint32(out[0:4], sig)
+	binary.BigEndian.PutUint32(out[4:8], w.Flavor)
+	length := w.Length
+	if length == 0 {
+		length = uint32(total)
+	} else {
+		length = uint32(total) // always use computed length for synthesis
+	}
+	binary.BigEndian.PutUint32(out[8:12], length)
+	binary.BigEndian.PutUint16(out[12:14], uint16(len(w.TableDirectory)))
+	binary.BigEndian.PutUint16(out[14:16], uint16(w.Reserved))
+	// totalSfntSize is the reconstructed SFNT size — sum of orig lengths
+	// plus 12-byte offset table + 16 bytes per directory entry plus
+	// 4-byte alignment per table. For round-trip we trust the decoded
+	// value when present.
+	total_sfnt := w.TotalSfntSize
+	if total_sfnt == 0 {
+		total_sfnt = computeTotalSfntSize(w.TableDirectory)
+	}
+	binary.BigEndian.PutUint32(out[16:20], total_sfnt)
+	binary.BigEndian.PutUint32(out[20:24], uint32(len(compressedBytes)))
+	binary.BigEndian.PutUint16(out[24:26], uint16(w.MajorVersion))
+	binary.BigEndian.PutUint16(out[26:28], uint16(w.MinorVersion))
+	binary.BigEndian.PutUint32(out[28:32], metaOffset)
+	metaLen := uint32(len(w.MetadataCompressed))
+	binary.BigEndian.PutUint32(out[32:36], metaLen)
+	binary.BigEndian.PutUint32(out[36:40], w.MetaOrigLength)
+	binary.BigEndian.PutUint32(out[40:44], privOffset)
+	binary.BigEndian.PutUint32(out[44:48], uint32(len(w.PrivateData)))
+
+	out = append(out, dirBytes...)
+	out = append(out, compressedBytes...)
+	if padLen > 0 {
+		out = append(out, make([]byte, padLen)...)
+	}
+	if len(w.MetadataCompressed) > 0 {
+		out = append(out, w.MetadataCompressed...)
+		if len(w.PrivateData) > 0 {
+			for len(out)%4 != 0 {
+				out = append(out, 0)
+			}
+		}
+	}
+	if len(w.PrivateData) > 0 {
+		out = append(out, w.PrivateData...)
+	}
+	return out, nil
+}
+
+// computeTotalSfntSize estimates the reconstructed SFNT byte length from
+// the directory (offset table + directory + per-table origLength padded
+// to 4 bytes).
+func computeTotalSfntSize(dir []*pb.Woff2TableDirectoryEntry) uint32 {
+	size := uint32(12 + 16*len(dir))
+	for _, e := range dir {
+		size += e.OrigLength
+		if pad := size % 4; pad != 0 {
+			size += 4 - pad
+		}
+	}
+	return size
+}
+
+// deriveGlyphCount recovers numGlyphs + indexFormat from the maxp and
+// head entries. Callers pre-load UntransformedData on glyf+loca but
+// not necessarily on head/maxp, so we read from Data for those tables.
+func deriveGlyphCount(dir []*pb.Woff2TableDirectoryEntry, loca []byte) (uint16, uint16, error) {
+	var maxp, head []byte
+	for _, e := range dir {
+		switch e.TagStr {
+		case "maxp":
+			maxp = e.Data
+		case "head":
+			head = e.Data
+		}
+	}
+	if len(maxp) < 6 {
+		return 0, 0, errors.New("maxp missing or short")
+	}
+	if len(head) < 54 {
+		return 0, 0, errors.New("head missing or short")
+	}
+	numGlyphs := binary.BigEndian.Uint16(maxp[4:6])
+	indexFormat := binary.BigEndian.Uint16(head[50:52])
+	// Sanity: loca length must match.
+	expected := int(numGlyphs+1) * 2
+	if indexFormat == 1 {
+		expected = int(numGlyphs+1) * 4
+	}
+	if len(loca) != expected {
+		return 0, 0, fmt.Errorf("loca length %d doesn't match numGlyphs=%d indexFormat=%d (expected %d)",
+			len(loca), numGlyphs, indexFormat, expected)
+	}
+	return numGlyphs, indexFormat, nil
 }
 
 // --- TTC synthesis -----------------------------------------------------------
