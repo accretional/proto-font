@@ -172,6 +172,11 @@ message Woff2TableDirectoryEntry {
   string tag_str = 5;          // human-readable tag, e.g. "glyf"
   bytes  data = 6;             // decompressed bytes for this table
   bool   transformed = 7;      // true when `data` is in WOFF2-transformed form
+  // Untransformed SFNT bytes when the WOFF2 glyf transform has been
+  // reversed. Populated by the decoder for glyf and loca entries where
+  // transformed=true; empty otherwise. `data` still holds the wire-form
+  // transformed bytes so re-encoding can round-trip them losslessly.
+  bytes  untransformed_data = 8;
 }
 
 message Woff2CollectionEntry {

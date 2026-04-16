@@ -285,17 +285,19 @@ resolve, and writes a full-page PNG. See `ui-e2e-validation/README.md`.
 Findings and known gaps surfaced while building the codec / schema.
 Append as new work comes up.
 
-- **WOFF2 decode** *(structural pass landed)*: header, variable-length
-  table directory (255UInt16 per spec §6.1.1), and brotli-decompressed
-  per-table bytes are now exposed on `Woff2TableDirectoryEntry.data`.
-  `glyf` and `loca` are still in their transformed form (per spec §5.1)
-  — see `transformed`/`transform_length` fields. Reversing the glyf
-  transform back to plain SFNT bytes is the next pass. WOFF2 collections
-  (`flavor == 'ttcf'`) are explicitly rejected. Brotli dep:
+- **WOFF2 decode** *(structural pass + glyf transform reversal landed)*:
+  header, variable-length table directory (UIntBase128 per spec §6.1.1),
+  and brotli-decompressed per-table bytes are on
+  `Woff2TableDirectoryEntry.data`. The glyf transform (spec §5.1) is
+  reversed into plain SFNT glyf + loca bytes on
+  `Woff2TableDirectoryEntry.untransformed_data` (populated on both the
+  `glyf` and `loca` entries). WOFF2 collections (`flavor == 'ttcf'`) are
+  still explicitly rejected. Brotli dep:
   `github.com/andybalholm/brotli` (see `CLAUDE_BLOOD_PACT.md`).
-- **WOFF2 encode from structured fields**: blocked on the glyf transform
-  reversal — we can re-emit the brotli stream from `Woff2TableDirectoryEntry.data`
-  but consumers still need the decoded glyf bytes to do anything useful.
+- **WOFF2 encode from structured fields**: still pending. We can re-emit
+  the brotli stream from `Woff2TableDirectoryEntry.data`, but a synthetic
+  encode path that drives from `untransformed_data` + recomputes the
+  transformed streams has not been written yet.
 - **TTC synthesis**: re-emitting a `.ttc` without `raw_bytes` means
   laying out shared table bodies across fonts. Not implemented; `Encode`
   errors out.

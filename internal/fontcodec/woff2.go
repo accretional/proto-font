@@ -25,6 +25,31 @@ var woff2KnownTags = [63]string{
 	"trak", "Zapf", "Silf", "Glat", "Gloc", "Feat", "Sill",
 }
 
+// readUIntBase128 decodes one variable-length 32-bit unsigned integer
+// per W3C WOFF2 spec §6.1.1. Used for origLength / transformLength
+// fields in the WOFF2 table directory. Returns the value and the
+// number of bytes consumed.
+func readUIntBase128(buf []byte) (uint32, int, error) {
+	var accum uint32
+	for i := 0; i < 5; i++ {
+		if i >= len(buf) {
+			return 0, 0, io.ErrUnexpectedEOF
+		}
+		b := buf[i]
+		if i == 0 && b == 0x80 {
+			return 0, 0, fmt.Errorf("UIntBase128: leading zero byte")
+		}
+		if accum&0xFE000000 != 0 {
+			return 0, 0, fmt.Errorf("UIntBase128: overflow")
+		}
+		accum = (accum << 7) | uint32(b&0x7f)
+		if b&0x80 == 0 {
+			return accum, i + 1, nil
+		}
+	}
+	return 0, 0, fmt.Errorf("UIntBase128: more than 5 bytes")
+}
+
 // read255UShort decodes one variable-length integer per W3C WOFF2 spec
 // §6.1.1. Returns the value and the number of bytes consumed.
 func read255UShort(buf []byte) (uint32, int, error) {
@@ -91,7 +116,7 @@ func parseWoff2Directory(buf []byte, numTables uint32) ([]*pb.Woff2TableDirector
 		}
 		tagStr := tagString(tagWire)
 
-		origLen, n, err := read255UShort(buf[cursor:])
+		origLen, n, err := readUIntBase128(buf[cursor:])
 		if err != nil {
 			return nil, 0, fmt.Errorf("woff2: entry %d origLength: %w", i, err)
 		}
@@ -104,7 +129,7 @@ func parseWoff2Directory(buf []byte, numTables uint32) ([]*pb.Woff2TableDirector
 			OrigLength: origLen,
 		}
 		if hasWoff2Transform(tagStr, transformVer) {
-			tlen, n, err := read255UShort(buf[cursor:])
+			tlen, n, err := readUIntBase128(buf[cursor:])
 			if err != nil {
 				return nil, 0, fmt.Errorf("woff2: entry %d transformLength: %w", i, err)
 			}

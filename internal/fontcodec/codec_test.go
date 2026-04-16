@@ -130,6 +130,73 @@ func TestWOFF2DecodeStructured(t *testing.T) {
 	}
 }
 
+// TestWOFF2GlyfTransformReversal runs reverseWoff2GlyfTransform against
+// the transformed glyf bytes carried on the TestWOFF2.woff2 fixture and
+// asserts byte-exact match against reference glyf + loca captures
+// produced with fonttools.
+func TestWOFF2GlyfTransformReversal(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	repoRoot := filepath.Join(filepath.Dir(file), "..", "..")
+	fixtures := filepath.Join(repoRoot, "data", "fonts", "handwritten")
+	raw, err := os.ReadFile(filepath.Join(fixtures, "TestWOFF2.woff2"))
+	if err != nil {
+		t.Skipf("fixture missing: %v", err)
+	}
+	wantGlyf, err := os.ReadFile(filepath.Join(fixtures, "TestWOFF2.expected.glyf.bin"))
+	if err != nil {
+		t.Fatalf("expected glyf: %v", err)
+	}
+	wantLoca, err := os.ReadFile(filepath.Join(fixtures, "TestWOFF2.expected.loca.bin"))
+	if err != nil {
+		t.Fatalf("expected loca: %v", err)
+	}
+
+	m, err := Decode(raw)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	var glyfData []byte
+	for _, e := range m.File.GetWoff2().TableDirectory {
+		if e.TagStr == "glyf" {
+			glyfData = e.Data
+			break
+		}
+	}
+	if glyfData == nil {
+		t.Fatal("no glyf entry in woff2 directory")
+	}
+
+	gotGlyf, gotLoca, _, err := reverseWoff2GlyfTransform(glyfData)
+	if err != nil {
+		t.Fatalf("reverseWoff2GlyfTransform: %v", err)
+	}
+	if !bytes.Equal(gotGlyf, wantGlyf) {
+		t.Errorf("glyf mismatch:\n got (%d bytes) %x\nwant (%d bytes) %x",
+			len(gotGlyf), gotGlyf, len(wantGlyf), wantGlyf)
+	}
+	if !bytes.Equal(gotLoca, wantLoca) {
+		t.Errorf("loca mismatch:\n got (%d bytes) %x\nwant (%d bytes) %x",
+			len(gotLoca), gotLoca, len(wantLoca), wantLoca)
+	}
+
+	// And verify the decoder wires reversed bytes onto the entries.
+	var glyfEntry, locaEntry *struct{ data []byte }
+	for _, e := range m.File.GetWoff2().TableDirectory {
+		if e.TagStr == "glyf" {
+			glyfEntry = &struct{ data []byte }{e.UntransformedData}
+		}
+		if e.TagStr == "loca" {
+			locaEntry = &struct{ data []byte }{e.UntransformedData}
+		}
+	}
+	if glyfEntry == nil || !bytes.Equal(glyfEntry.data, wantGlyf) {
+		t.Errorf("glyf entry untransformed_data not wired")
+	}
+	if locaEntry == nil || !bytes.Equal(locaEntry.data, wantLoca) {
+		t.Errorf("loca entry untransformed_data not wired")
+	}
+}
+
 func TestDetectFlavor(t *testing.T) {
 	cases := []struct {
 		name string

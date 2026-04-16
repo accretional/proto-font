@@ -344,6 +344,30 @@ func decodeWOFF2(raw []byte) (*pb.Woff2Font, error) {
 		return nil, err
 	}
 
+	// Reverse the glyf transform (spec §5.1) so callers can see standard
+	// SFNT glyf + loca bytes without a second decoder. The transformed
+	// bytes are preserved in `data` for round-trip fidelity; the
+	// reconstructed bytes land in `untransformed_data` on both entries.
+	var glyfEntry, locaEntry *pb.Woff2TableDirectoryEntry
+	for _, e := range w.TableDirectory {
+		switch e.TagStr {
+		case "glyf":
+			glyfEntry = e
+		case "loca":
+			locaEntry = e
+		}
+	}
+	if glyfEntry != nil && glyfEntry.Transformed {
+		glyf, loca, _, err := reverseWoff2GlyfTransform(glyfEntry.Data)
+		if err != nil {
+			return nil, fmt.Errorf("fontcodec: WOFF2 glyf transform reversal: %w", err)
+		}
+		glyfEntry.UntransformedData = glyf
+		if locaEntry != nil {
+			locaEntry.UntransformedData = loca
+		}
+	}
+
 	if w.MetaOffset != 0 && w.MetaLength != 0 {
 		end := int(w.MetaOffset) + int(w.MetaLength)
 		if end <= len(raw) {
