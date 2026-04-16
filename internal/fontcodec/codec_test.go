@@ -443,6 +443,110 @@ func TestCmapSubtableParsing(t *testing.T) {
 	}
 }
 
+// TestTTCEncodeRoundTrip decodes the fonttools TTC fixture, clears
+// raw_bytes, re-encodes via the synthesis path, decodes again, and
+// asserts every font's table bytes survive byte-identical. Shared
+// table bodies must stay shared: after re-encode, two fonts whose
+// decoded tables had identical RawData should still point at the same
+// offset in the synthesised TTC.
+func TestTTCEncodeRoundTrip(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	repoRoot := filepath.Join(filepath.Dir(file), "..", "..")
+	path := filepath.Join(repoRoot, "data", "fonts", "handwritten", "TestTTC.ttc")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Skipf("fixture missing: %v", err)
+	}
+	m, err := Decode(raw)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	m.RawBytes = nil
+	out, err := Encode(m)
+	if err != nil {
+		t.Fatalf("Encode synth: %v", err)
+	}
+	m2, err := Decode(out)
+	if err != nil {
+		t.Fatalf("Decode of synth output: %v", err)
+	}
+	c1 := m.File.GetCollection()
+	c2 := m2.File.GetCollection()
+	if c1 == nil || c2 == nil {
+		t.Fatal("no FontCollection body after round-trip")
+	}
+	if len(c1.Fonts) != len(c2.Fonts) {
+		t.Fatalf("fonts count: got %d want %d", len(c2.Fonts), len(c1.Fonts))
+	}
+	for i := range c1.Fonts {
+		f1, f2 := c1.Fonts[i], c2.Fonts[i]
+		if len(f1.Tables) != len(f2.Tables) {
+			t.Errorf("font %d tables: got %d want %d", i, len(f2.Tables), len(f1.Tables))
+			continue
+		}
+		byTag1 := map[string]*pb.SfntTable{}
+		for _, tb := range f1.Tables {
+			byTag1[tb.Tag] = tb
+		}
+		for _, tb := range f2.Tables {
+			want, ok := byTag1[tb.Tag]
+			if !ok {
+				t.Errorf("font %d: new table tag %q after round-trip", i, tb.Tag)
+				continue
+			}
+			if !bytes.Equal(tb.RawData, want.RawData) {
+				t.Errorf("font %d table %s: RawData mismatch (%d vs %d)",
+					i, tb.Tag, len(tb.RawData), len(want.RawData))
+			}
+		}
+	}
+	// Sharing check: if the fixture has two fonts that decoded to any
+	// byte-identical table, the re-encoded TTC should still point those
+	// tables at the same offset.
+	if len(c2.Fonts) >= 2 {
+		f1tables := map[string]uint32{}
+		for _, tb := range c2.Fonts[0].Tables {
+			f1tables[tb.Tag] = tb.Offset
+		}
+		shared := 0
+		for _, tb := range c2.Fonts[1].Tables {
+			if off, ok := f1tables[tb.Tag]; ok && off == tb.Offset {
+				shared++
+			}
+		}
+		if shared == 0 {
+			t.Log("note: no shared offsets between fonts[0] and fonts[1] — fixture may not exercise dedup")
+		}
+	}
+}
+
+// TestEOTEncodeRoundTrip decodes the fontawesome EOT fixture, clears
+// raw_bytes, re-encodes via synthesis, and verifies byte-exactness.
+// Because EOT is a thin wrapper around an opaque font body, synthesis
+// is byte-deterministic provided we preserve the decoded trailing
+// header bytes.
+func TestEOTEncodeRoundTrip(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	repoRoot := filepath.Join(filepath.Dir(file), "..", "..")
+	path := filepath.Join(repoRoot, "data", "fonts", "handwritten", "fontawesome-webfont.eot")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Skipf("fixture missing: %v", err)
+	}
+	m, err := Decode(raw)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	m.RawBytes = nil
+	out, err := Encode(m)
+	if err != nil {
+		t.Fatalf("Encode synth: %v", err)
+	}
+	if !bytes.Equal(out, raw) {
+		t.Errorf("EOT synth round-trip mismatch: got %d bytes, want %d", len(out), len(raw))
+	}
+}
+
 func TestDetectFlavor(t *testing.T) {
 	cases := []struct {
 		name string

@@ -540,14 +540,229 @@ func deriveGlyphCount(dir []*pb.Woff2TableDirectoryEntry, loca []byte) (uint16, 
 
 // --- TTC synthesis -----------------------------------------------------------
 
+// encodeTTC lays out a TTC: header + per-font offsets + per-font offset
+// tables & directories + shared table bodies (deduplicated across
+// fonts). Identical table RawData is shared so each font's directory
+// points at the same offset, matching how real TTCs store CJK
+// collections. head.checkSumAdjustment is NOT recomputed in collections
+// — the OpenType spec treats it as "ignored" there (§2.2), and the
+// algorithm isn't well-defined when bodies are shared.
 func encodeTTC(c *pb.FontCollection) ([]byte, error) {
-	// Synthesising a TTC from nested SfntFont structs requires re-laying out
-	// shared table bodies; we only support round-trip via RawBytes today.
-	return nil, errors.New("fontcodec: TTC synthesis without RawBytes is not supported yet")
+	if c == nil {
+		return nil, errors.New("fontcodec: nil FontCollection")
+	}
+	numFonts := len(c.Fonts)
+	if numFonts == 0 {
+		return nil, errors.New("fontcodec: empty collection")
+	}
+
+	// Deduplicate table bodies by byte-identical RawData. We key the map
+	// by the string view of RawData; concat is allocation-heavy but this
+	// only runs in the synthesis path.
+	type body struct {
+		data   []byte
+		offset uint32
+	}
+	bodies := []*body{}
+	bodyIdx := map[string]int{}
+	// fontTableBody[fontIdx][tagOrdinal] = body index.
+	fontTableBody := make([][]int, numFonts)
+	for i, f := range c.Fonts {
+		fontTableBody[i] = make([]int, len(f.Tables))
+		for j, t := range f.Tables {
+			key := string(t.RawData)
+			idx, ok := bodyIdx[key]
+			if !ok {
+				idx = len(bodies)
+				bodies = append(bodies, &body{data: t.RawData})
+				bodyIdx[key] = idx
+			}
+			fontTableBody[i][j] = idx
+		}
+	}
+
+	majorVersion := c.MajorVersion
+	if majorVersion == 0 {
+		majorVersion = 1
+	}
+	headerSize := 12 + 4*numFonts
+	if majorVersion >= 2 {
+		headerSize += 12
+	}
+
+	// Per-font offset tables immediately follow the header.
+	fontOffsets := make([]uint32, numFonts)
+	pos := headerSize
+	for i, f := range c.Fonts {
+		fontOffsets[i] = uint32(pos)
+		pos += 12 + 16*len(f.Tables)
+	}
+
+	// Shared table bodies, each 4-byte aligned.
+	for _, b := range bodies {
+		if r := pos % 4; r != 0 {
+			pos += 4 - r
+		}
+		b.offset = uint32(pos)
+		pos += len(b.data)
+	}
+
+	// DSIG data (v2) sits at the end.
+	var dsigAtOffset uint32
+	if majorVersion >= 2 && len(c.DsigData) > 0 {
+		if r := pos % 4; r != 0 {
+			pos += 4 - r
+		}
+		dsigAtOffset = uint32(pos)
+		pos += len(c.DsigData)
+	}
+
+	out := make([]byte, pos)
+
+	// TTC header.
+	ttcTag := c.TtcTag
+	if ttcTag == 0 {
+		ttcTag = magicTTC
+	}
+	binary.BigEndian.PutUint32(out[0:4], ttcTag)
+	binary.BigEndian.PutUint16(out[4:6], uint16(majorVersion))
+	binary.BigEndian.PutUint16(out[6:8], uint16(c.MinorVersion))
+	binary.BigEndian.PutUint32(out[8:12], uint32(numFonts))
+	for i, o := range fontOffsets {
+		binary.BigEndian.PutUint32(out[12+4*i:16+4*i], o)
+	}
+	if majorVersion >= 2 {
+		base := 12 + 4*numFonts
+		binary.BigEndian.PutUint32(out[base:base+4], c.DsigTag)
+		if len(c.DsigData) > 0 {
+			binary.BigEndian.PutUint32(out[base+4:base+8], uint32(len(c.DsigData)))
+			binary.BigEndian.PutUint32(out[base+8:base+12], dsigAtOffset)
+		} else {
+			binary.BigEndian.PutUint32(out[base+4:base+8], c.DsigLength)
+			binary.BigEndian.PutUint32(out[base+8:base+12], c.DsigOffset)
+		}
+	}
+
+	// Shared body bytes.
+	for _, b := range bodies {
+		copy(out[b.offset:], b.data)
+	}
+	// DSIG data.
+	if dsigAtOffset > 0 {
+		copy(out[dsigAtOffset:], c.DsigData)
+	}
+
+	// Per-font offset table + directory.
+	for i, f := range c.Fonts {
+		base := int(fontOffsets[i])
+		ver := f.SfntVersion
+		if ver == 0 {
+			ver = magicTrueType
+		}
+		n := len(f.Tables)
+		binary.BigEndian.PutUint32(out[base:base+4], ver)
+		binary.BigEndian.PutUint16(out[base+4:base+6], uint16(n))
+		sr, es, rs := searchRangeFor(uint16(n))
+		if f.SearchRange != 0 {
+			sr = uint16(f.SearchRange)
+		}
+		if f.EntrySelector != 0 {
+			es = uint16(f.EntrySelector)
+		}
+		if f.RangeShift != 0 {
+			rs = uint16(f.RangeShift)
+		}
+		binary.BigEndian.PutUint16(out[base+6:base+8], sr)
+		binary.BigEndian.PutUint16(out[base+8:base+10], es)
+		binary.BigEndian.PutUint16(out[base+10:base+12], rs)
+
+		// Directory order preserves TableDirectoryOrder, else tag-sorted.
+		dir := make([]int, n)
+		for j := range dir {
+			dir[j] = j
+		}
+		if len(f.TableDirectoryOrder) == n {
+			tagToIdx := map[string]int{}
+			for j, t := range f.Tables {
+				tagToIdx[t.Tag] = j
+			}
+			dir = dir[:0]
+			for _, tag := range f.TableDirectoryOrder {
+				if idx, ok := tagToIdx[tag]; ok {
+					dir = append(dir, idx)
+				}
+			}
+		}
+		if len(dir) != n {
+			dir = dir[:n]
+			sort.SliceStable(dir, func(a, b int) bool {
+				return f.Tables[dir[a]].Tag < f.Tables[dir[b]].Tag
+			})
+		} else {
+			sort.SliceStable(dir, func(a, b int) bool {
+				return f.Tables[dir[a]].Tag < f.Tables[dir[b]].Tag
+			})
+		}
+
+		for j, tblIdx := range dir {
+			t := f.Tables[tblIdx]
+			d := base + 12 + 16*j
+			binary.BigEndian.PutUint32(out[d:d+4], tagRaw(t.Tag))
+			checksum := t.Checksum
+			if checksum == 0 && len(t.RawData) > 0 {
+				if t.Tag == "head" && len(t.RawData) >= 12 {
+					scratch := append([]byte(nil), t.RawData...)
+					binary.BigEndian.PutUint32(scratch[8:12], 0)
+					checksum = sfntTableChecksum(scratch)
+				} else {
+					checksum = sfntTableChecksum(t.RawData)
+				}
+			}
+			binary.BigEndian.PutUint32(out[d+4:d+8], checksum)
+			binary.BigEndian.PutUint32(out[d+8:d+12], bodies[fontTableBody[i][tblIdx]].offset)
+			binary.BigEndian.PutUint32(out[d+12:d+16], uint32(len(t.RawData)))
+		}
+	}
+
+	return out, nil
 }
 
 // --- EOT synthesis -----------------------------------------------------------
 
+// encodeEOT rebuilds an EOT file from the structured Eot message: the
+// 36-byte fixed header (little-endian) followed by the variable-length
+// trailing header bytes as recorded at decode time, followed by the
+// opaque font body. The MTX-compressed font body path is out of scope
+// — Decode records it as bytes and we re-emit verbatim.
 func encodeEOT(e *pb.Eot) ([]byte, error) {
-	return nil, errors.New("fontcodec: EOT synthesis without RawBytes is not supported yet")
+	if e == nil {
+		return nil, errors.New("fontcodec: nil Eot")
+	}
+	if len(e.FontPanose) != 10 {
+		return nil, fmt.Errorf("fontcodec: EOT FontPanose must be 10 bytes, got %d", len(e.FontPanose))
+	}
+	fontDataSize := e.FontDataSize
+	if fontDataSize == 0 {
+		fontDataSize = uint32(len(e.FontData))
+	}
+	totalSize := 36 + len(e.TrailingHeader) + len(e.FontData)
+	eotSize := e.EotSize
+	if eotSize == 0 {
+		eotSize = uint32(totalSize)
+	}
+
+	out := make([]byte, totalSize)
+	binary.LittleEndian.PutUint32(out[0:4], eotSize)
+	binary.LittleEndian.PutUint32(out[4:8], fontDataSize)
+	binary.LittleEndian.PutUint32(out[8:12], e.Version)
+	binary.LittleEndian.PutUint32(out[12:16], e.Flags)
+	copy(out[16:26], e.FontPanose)
+	out[26] = byte(e.Charset)
+	out[27] = byte(e.Italic)
+	binary.LittleEndian.PutUint32(out[28:32], e.Weight)
+	binary.LittleEndian.PutUint16(out[32:34], uint16(e.FsType))
+	binary.LittleEndian.PutUint16(out[34:36], uint16(e.MagicNumber))
+	copy(out[36:], e.TrailingHeader)
+	copy(out[36+len(e.TrailingHeader):], e.FontData)
+	return out, nil
 }

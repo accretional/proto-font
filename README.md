@@ -303,10 +303,17 @@ Append as new work comes up.
   (decode→encode→decode) is covered by
   `TestWOFF2EncodeRoundTrip`; byte-exact vs the original is not a
   goal since brotli is non-deterministic across encoders.
-- **TTC synthesis**: re-emitting a `.ttc` without `raw_bytes` means
-  laying out shared table bodies across fonts. Not implemented; `Encode`
-  errors out.
-- **EOT synthesis**: same story as TTC — round-trip via `raw_bytes` only.
+- **TTC synthesis** *(landed)*: `encodeTTC` lays out the TTC header +
+  per-font offset tables + **deduplicated** shared table bodies.
+  Identical `SfntTable.raw_data` across fonts is written once, so the
+  typical CJK "multiple weights sharing glyf" layout re-collapses on
+  synthesis. v2 DSIG data is placed at the end when present.
+  `head.checkSumAdjustment` is preserved verbatim per OpenType §2.2
+  (the value is "ignored" in collections). Covered by
+  `TestTTCEncodeRoundTrip`.
+- **EOT synthesis** *(landed)*: `encodeEOT` rebuilds the 36-byte
+  little-endian header + variable-length trailing header bytes + opaque
+  font body. Byte-exact round-trip via `TestEOTEncodeRoundTrip`.
 - **cmap subtable parsing** *(landed — formats 0, 4, 6, 10, 12, 13, 14)*:
   the decoder now fills `CmapEncodingRecord.parsed_subtable` with a
   format-specific message (segment arrays for fmt4, range groups for
