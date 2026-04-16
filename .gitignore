@@ -34,6 +34,7 @@ go.work.sum
 # Fetched font fixtures (pulled by setup.sh; not checked in)
 data/fonts/noto/
 data/fonts/gfonts/
+data/fonts/material-symbols/
 data/metadata/
 *.tmp
 

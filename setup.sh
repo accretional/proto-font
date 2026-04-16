@@ -231,6 +231,29 @@ download_if_missing \
   "https://raw.githubusercontent.com/google/fonts/main/ofl/notosansmono/NotoSansMono%5Bwdth%2Cwght%5D.ttf" \
   "$FIXTURES_DIR/NotoSansMono-VF.ttf"
 
+# Material Symbols variable fonts from google/material-design-icons.
+# Four-axis (FILL, GRAD, opsz, wght) variable fonts — they stress the
+# variation tables (fvar/avar/STAT/HVAR/MVAR/gvar) far harder than the
+# two-axis Noto fixtures. We grab one TTF per icon family (Outlined,
+# Rounded, Sharp) plus a real-world WOFF2 (Outlined) so the codec gets
+# a non-fonttools-test WOFF2 sample.
+MATERIAL_DIR="$ROOT/data/fonts/material-symbols"
+mkdir -p "$MATERIAL_DIR"
+MDI_BASE="https://raw.githubusercontent.com/google/material-design-icons/master/variablefont"
+MDI_AXES="%5BFILL%2CGRAD%2Copsz%2Cwght%5D"
+download_if_missing \
+  "$MDI_BASE/MaterialSymbolsOutlined${MDI_AXES}.ttf" \
+  "$MATERIAL_DIR/MaterialSymbolsOutlined-VF.ttf"
+download_if_missing \
+  "$MDI_BASE/MaterialSymbolsRounded${MDI_AXES}.ttf" \
+  "$MATERIAL_DIR/MaterialSymbolsRounded-VF.ttf"
+download_if_missing \
+  "$MDI_BASE/MaterialSymbolsSharp${MDI_AXES}.ttf" \
+  "$MATERIAL_DIR/MaterialSymbolsSharp-VF.ttf"
+download_if_missing \
+  "$MDI_BASE/MaterialSymbolsOutlined${MDI_AXES}.woff2" \
+  "$MATERIAL_DIR/MaterialSymbolsOutlined-VF.woff2"
+
 # METADATA.pb text-protos, one per family. Covers variable axes, Noto
 # flag, ofl vs apache licensing, display/monospace categories, material
 # symbols (display-only).

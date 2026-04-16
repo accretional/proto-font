@@ -356,11 +356,15 @@ Append as new work comes up.
   The corpus-backed tests (`TestCheckFilenamesCorpus`,
   `TestLoadDescriptionCorpus`, `TestLoadAxisRegistry`) run against the
   `SETUP_FULL=1` google/fonts clone and skip when it's absent.
-- **Material Design Icons ingestion**: README asks to "get the fonts out
-  of https://github.com/google/material-design-icons". `setup.sh` does
-  not fetch them today — add a fixture pull if we want to validate
-  Material Symbols TTFs specifically (they stress variable-axis + colour
-  tables).
+- **Material Design Icons ingestion** *(landed — fixtures pulled by setup.sh
+  into `data/fonts/material-symbols/`)*: three Material Symbols variable
+  TTFs (Outlined / Rounded / Sharp, four-axis FILL+GRAD+opsz+wght) plus
+  a real-world WOFF2 (Outlined). Auto-included by the validation sweep
+  + benchmarks; round-trip parity holds for all four. They stress the
+  variation tables (`fvar`/`avar`/`STAT`/`HVAR`/`MVAR`/`gvar`) much
+  harder than the two-axis Noto fixtures and give us our first
+  non-fonttools-test WOFF2. Follow-up: a colour-table sample
+  (`COLR`/`CPAL`) is still missing — Material Symbols is monochrome.
 - **`lang` data files**: we vendor the schema, not the `.textproto` data.
   If `gfapi` gains a "fonts covering language X" helper we need to pull
   the data.
