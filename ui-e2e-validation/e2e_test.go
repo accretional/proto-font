@@ -116,6 +116,14 @@ func TestChromerpcScreenshots(t *testing.T) {
 
 	workDir := t.TempDir()
 	shotDir := filepath.Join(workDir, "screenshots")
+	// SCREENSHOT_OUT_DIR overrides the temp screenshot dir so callers can
+	// keep PNGs around (e.g. to refresh docs/screenshots/).
+	if v := os.Getenv("SCREENSHOT_OUT_DIR"); v != "" {
+		shotDir = v
+		if err := os.MkdirAll(shotDir, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", shotDir, err)
+		}
+	}
 
 	// Serve the font binaries AND (eventually) the generated HTML from
 	// a single static server so @font-face src URLs resolve.
