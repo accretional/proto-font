@@ -1,0 +1,215 @@
+// Container-level schema for OpenType/TrueType/WOFF/TTC/EOT.
+//
+// This file models the discriminated union of on-disk container flavors and
+// the per-flavor header layout. Structured per-table messages live in
+// sibling files:
+//
+//   sfnt_table.proto      SfntTable + parsed oneof pointing at every other table.
+//   tables_core.proto     head, hhea, maxp, OS/2, post, name, cmap, hmtx, loca
+//                         (fully decomposed today).
+//   tables_glyphs.proto   glyf, CFF, CFF2, VORG, cvt, fpgm, prep (gluon stubs).
+//   tables_layout.proto   GSUB, GPOS, GDEF, BASE, JSTF, MATH (gluon stubs).
+//   tables_variations.proto  fvar, avar, STAT, HVAR, VVAR, MVAR, gvar (gluon stubs).
+//   tables_color.proto    COLR, CPAL, sbix, CBDT, CBLC, SVG, EBDT, EBLC, EBSC
+//                         (gluon stubs).
+//   tables_metrics.proto  vhea, vmtx, kern, hdmx, LTSH, VDMX, gasp, PCLT
+//                         (gluon stubs).
+//   tables_meta.proto     meta, DSIG, MERG (gluon stubs).
+//
+// All messages share the same `openformat.v1` proto package and the
+// generated Go package `openformatv1` — the split is for authoring
+// clarity, not namespacing.
+//
+// `FontFileWithMetadata.raw_bytes` + `SfntTable.raw_data` together
+// guarantee byte-exact Decode → Encode round-trip even for tables whose
+// structured schema is still a stub.
+
+syntax = "proto3";
+
+package openformat.v1;
+
+option go_package = "openformat/gen/go/openformat/v1;openformatv1";
+
+import "openformat/v1/mime.proto";
+import "openformat/v1/sfnt_table.proto";
+
+// ------------------------------------------------------------------
+//  Top-level wrapper
+// ------------------------------------------------------------------
+
+message FontFileWithMetadata {
+  FontFile file = 1;
+  MimeType mime_type = 2;
+  FontProvenance provenance = 3;
+  // Raw source bytes — always set by Decode; required by Encode for
+  // byte-exact round-trip fidelity.
+  bytes raw_bytes = 100;
+}
+
+message FontFile {
+  FontContainerFlavor flavor = 1;
+  oneof body {
+    SfntFont sfnt = 2;             // .ttf / .otf
+    WoffFont woff1 = 3;            // WOFF 1.0
+    Woff2Font woff2 = 4;           // WOFF 2.0
+    FontCollection collection = 5; // .ttc / .otc
+    Eot eot = 6;                   // Embedded OpenType (legacy IE)
+  }
+}
+
+enum FontContainerFlavor {
+  FONT_CONTAINER_UNSPECIFIED = 0;
+  FONT_CONTAINER_TRUETYPE = 1;     // magic 0x00010000
+  FONT_CONTAINER_OPENTYPE_CFF = 2; // magic 'OTTO'
+  FONT_CONTAINER_TRUE_APPLE = 3;   // magic 'true' / 'typ1'
+  FONT_CONTAINER_WOFF1 = 4;        // magic 'wOFF'
+  FONT_CONTAINER_WOFF2 = 5;        // magic 'wOF2'
+  FONT_CONTAINER_COLLECTION = 6;   // magic 'ttcf'
+  FONT_CONTAINER_EOT = 7;          // Embedded OpenType
+}
+
+message FontProvenance {
+  string source_url = 1;
+  string license_identifier = 2; // SPDX id, e.g. OFL-1.1, Apache-2.0
+  string upstream_repo = 3;
+  string upstream_commit = 4;
+  string sha256 = 5;
+}
+
+// ------------------------------------------------------------------
+//  SFNT (TrueType + OpenType)
+// ------------------------------------------------------------------
+
+message SfntFont {
+  uint32 sfnt_version = 1;
+  uint32 num_tables = 2;
+  uint32 search_range = 3;
+  uint32 entry_selector = 4;
+  uint32 range_shift = 5;
+  repeated SfntTable tables = 6;
+  // Order in which table records appeared in the directory (by tag).
+  // Decode preserves this for exact byte reproduction on re-encode.
+  repeated string table_directory_order = 7;
+  // Order in which *table bodies* appear in the file (by tag).
+  repeated string table_body_order = 8;
+  // Raw padding bytes observed between / after table bodies, keyed by
+  // the tag of the preceding table. Empty when standard 4-byte zero
+  // padding is in effect.
+  map<string, bytes> post_table_padding = 9;
+}
+
+// ------------------------------------------------------------------
+//  WOFF 1.0
+// ------------------------------------------------------------------
+
+message WoffFont {
+  uint32 signature = 1;           // 'wOFF'
+  uint32 flavor = 2;              // sfnt version of the decompressed font
+  uint32 length = 3;
+  uint32 num_tables = 4;
+  uint32 reserved = 5;
+  uint32 total_sfnt_size = 6;
+  uint32 major_version = 7;
+  uint32 minor_version = 8;
+  uint32 meta_offset = 9;
+  uint32 meta_length = 10;
+  uint32 meta_orig_length = 11;
+  uint32 priv_offset = 12;
+  uint32 priv_length = 13;
+  repeated WoffTable tables = 14;
+  bytes metadata_compressed = 15; // zlib
+  string metadata_xml = 16;       // decoded XML when decompression succeeded
+  bytes private_data = 17;
+}
+
+message WoffTable {
+  string tag = 1;
+  uint32 tag_raw = 2;
+  uint32 offset = 3;
+  uint32 comp_length = 4;
+  uint32 orig_length = 5;
+  uint32 orig_checksum = 6;
+  bytes stored_data = 7;       // exactly `comp_length` bytes from the file
+  bool was_compressed = 8;     // true when comp_length < orig_length
+}
+
+// ------------------------------------------------------------------
+//  WOFF 2.0
+// ------------------------------------------------------------------
+//
+// File-level structure only. Brotli decode + per-table transform
+// reversal are deferred — see README NEXT STEPS.
+
+message Woff2Font {
+  uint32 signature = 1;           // 'wOF2'
+  uint32 flavor = 2;
+  uint32 length = 3;
+  uint32 num_tables = 4;
+  uint32 reserved = 5;
+  uint32 total_sfnt_size = 6;
+  uint32 total_compressed_size = 7;
+  uint32 major_version = 8;
+  uint32 minor_version = 9;
+  uint32 meta_offset = 10;
+  uint32 meta_length = 11;
+  uint32 meta_orig_length = 12;
+  uint32 priv_offset = 13;
+  uint32 priv_length = 14;
+  repeated Woff2TableDirectoryEntry table_directory = 15;
+  repeated Woff2CollectionEntry collection_entries = 16;
+  bytes compressed_stream = 17;   // brotli-compressed
+  bytes metadata_compressed = 18; // zlib-compressed
+  bytes private_data = 19;
+}
+
+message Woff2TableDirectoryEntry {
+  uint32 flags = 1;            // low 6 bits = tag index, top 2 = transform
+  uint32 tag = 2;              // present when flags tag index == 63
+  uint32 orig_length = 3;      // 255UInt16
+  uint32 transform_length = 4; // present for glyf/loca transform
+}
+
+message Woff2CollectionEntry {
+  uint32 num_tables = 1;
+  uint32 flavor = 2;
+  repeated uint32 table_indices = 3;
+}
+
+// ------------------------------------------------------------------
+//  TrueType Collection (.ttc)
+// ------------------------------------------------------------------
+
+message FontCollection {
+  uint32 ttc_tag = 1;       // 'ttcf'
+  uint32 major_version = 2;
+  uint32 minor_version = 3;
+  repeated uint32 offset_table_offsets = 4;
+  repeated SfntFont fonts = 5;
+  // v2 digital signature fields.
+  uint32 dsig_tag = 6;
+  uint32 dsig_length = 7;
+  uint32 dsig_offset = 8;
+  bytes  dsig_data = 9;
+}
+
+// ------------------------------------------------------------------
+//  Embedded OpenType (legacy MSIE)
+// ------------------------------------------------------------------
+//
+// Round-trips via raw bytes; parsing the MTX-compressed body is out of
+// scope. See https://www.w3.org/Submission/EOT/.
+
+message Eot {
+  uint32 eot_size = 1;
+  uint32 font_data_size = 2;
+  uint32 version = 3;
+  uint32 flags = 4;
+  bytes  font_panose = 5;       // 10 bytes
+  uint32 charset = 6;
+  uint32 italic = 7;
+  uint32 weight = 8;
+  uint32 fs_type = 9;
+  uint32 magic_number = 10;     // 0x504C
+  bytes  trailing_header = 11;
+  bytes  font_data = 12;        // opaque; may be MTX-compressed SFNT
+}

@@ -1,0 +1,31 @@
+// Color / bitmap tables — STUBS for the gluon parser project.
+//
+// Empty messages reserving names + field IDs for the SfntTable.parsed
+// oneof. Bytes remain in SfntTable.raw_data until gluon lands.
+//
+// Scope:
+//   ColrTable   Color layer records (emoji, multi-color glyphs). [OT §6.COLR]
+//   CpalTable   Palette entries referenced by COLR.              [OT §6.CPAL]
+//   SbixTable   Apple standard bitmap graphics (PNG glyphs).     [OT §5.sbix]
+//   CbdtTable   Color bitmap data (PNG/JPEG).                    [OT §5.CBDT]
+//   CblcTable   Color bitmap location (strikes / index).         [OT §5.CBLC]
+//   SvgTable    SVG glyph definitions.                           [OT §6.SVG]
+//   EbdtTable   Embedded (monochrome) bitmap data.               [OT §5.EBDT]
+//   EblcTable   Embedded bitmap location.                        [OT §5.EBLC]
+//   EbscTable   Embedded bitmap scaling.                         [OT §5.EBSC]
+
+syntax = "proto3";
+
+package openformat.v1;
+
+option go_package = "openformat/gen/go/openformat/v1;openformatv1";
+
+message ColrTable {}
+message CpalTable {}
+message SbixTable {}
+message CbdtTable {}
+message CblcTable {}
+message SvgTable  {}
+message EbdtTable {}
+message EblcTable {}
+message EbscTable {}

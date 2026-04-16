@@ -1,0 +1,19 @@
+// Miscellaneous metadata tables — STUBS for the gluon parser project.
+//
+// Empty messages reserving names + field IDs for the SfntTable.parsed
+// oneof. Bytes remain in SfntTable.raw_data until gluon lands.
+//
+// Scope:
+//   MetaTable  Metadata (script/language tags, etc).  [OT §5.meta]
+//   DsigTable  Digital signature.                     [OT §5.DSIG]
+//   MergTable  Merge table (rarely used).             [OT §5.MERG]
+
+syntax = "proto3";
+
+package openformat.v1;
+
+option go_package = "openformat/gen/go/openformat/v1;openformatv1";
+
+message MetaTable {}
+message DsigTable {}
+message MergTable {}

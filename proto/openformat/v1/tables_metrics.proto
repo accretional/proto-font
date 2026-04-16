@@ -1,0 +1,29 @@
+// Extended metrics & device-specific tables — STUBS for gluon.
+//
+// Empty messages reserving names + field IDs for the SfntTable.parsed
+// oneof. Bytes remain in SfntTable.raw_data until gluon lands.
+//
+// Scope:
+//   VheaTable  Vertical header.                                 [OT §5.vhea]
+//   VmtxTable  Vertical metrics (per-glyph advance/bearing).    [OT §5.vmtx]
+//   KernTable  Legacy pair kerning (superseded by GPOS).        [OT §5.kern]
+//   HdmxTable  Horizontal device metrics (per-ppem advances).   [OT §5.hdmx]
+//   LtshTable  Linear threshold (per-glyph linear ppem).        [OT §5.LTSH]
+//   VdmxTable  Vertical device metrics.                         [OT §5.VDMX]
+//   GaspTable  Grid-fitting & scan-conversion behaviour.        [OT §5.gasp]
+//   PcltTable  Printer driver info (deprecated).                [OT §5.PCLT]
+
+syntax = "proto3";
+
+package openformat.v1;
+
+option go_package = "openformat/gen/go/openformat/v1;openformatv1";
+
+message VheaTable {}
+message VmtxTable {}
+message KernTable {}
+message HdmxTable {}
+message LtshTable {}
+message VdmxTable {}
+message GaspTable {}
+message PcltTable {}

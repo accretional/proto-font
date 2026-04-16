@@ -30,3 +30,20 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Fetched font fixtures (pulled by setup.sh; not checked in)
+data/fonts/noto/
+data/fonts/gfonts/
+data/metadata/
+*.tmp
+
+# ui-e2e-validation screenshot output
+ui-e2e-validation/out/
+ui-e2e-validation/screenshots/
+
+# Claude Code session artefacts
+.claude/
+
+# NOTE: proto/ (both authored and vendored upstream .proto files) and
+# gen/ (protoc-generated Go) are intentionally NOT ignored — they are
+# checked in so the repo builds without running setup.sh first.

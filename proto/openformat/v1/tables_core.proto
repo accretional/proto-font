@@ -1,0 +1,192 @@
+// Core SFNT tables — fully decomposed today.
+//
+// Every OpenType-required table with a tractable fixed-size header
+// lives here: head, hhea, maxp, OS/2, post, name, cmap (directory),
+// hmtx, loca. Consumers that only need metadata / layout bounds never
+// have to touch raw bytes for these.
+
+syntax = "proto3";
+
+package openformat.v1;
+
+option go_package = "openformat/gen/go/openformat/v1;openformatv1";
+
+// ---------------- head (font header) [OT §5.head] ----------------
+message HeadTable {
+  uint32 major_version = 1;
+  uint32 minor_version = 2;
+  int64  font_revision_fixed = 3;   // Fixed 16.16, stored as raw int32 widened
+  uint32 check_sum_adjustment = 4;  // MUST be recomputed on encode
+  uint32 magic_number = 5;          // 0x5F0F3CF5
+  uint32 flags = 6;
+  uint32 units_per_em = 7;
+  int64  created = 8;               // LONGDATETIME (seconds since 1904-01-01)
+  int64  modified = 9;
+  int32  x_min = 10;
+  int32  y_min = 11;
+  int32  x_max = 12;
+  int32  y_max = 13;
+  uint32 mac_style = 14;
+  uint32 lowest_rec_ppem = 15;
+  int32  font_direction_hint = 16;
+  int32  index_to_loc_format = 17;  // 0 = short offsets, 1 = long
+  int32  glyph_data_format = 18;
+}
+
+// ---------------- hhea (horizontal header) [OT §5.hhea] ----------
+message HheaTable {
+  uint32 major_version = 1;
+  uint32 minor_version = 2;
+  int32  ascender = 3;
+  int32  descender = 4;
+  int32  line_gap = 5;
+  uint32 advance_width_max = 6;
+  int32  min_left_side_bearing = 7;
+  int32  min_right_side_bearing = 8;
+  int32  x_max_extent = 9;
+  int32  caret_slope_rise = 10;
+  int32  caret_slope_run = 11;
+  int32  caret_offset = 12;
+  int32  metric_data_format = 13;
+  uint32 number_of_h_metrics = 14;
+}
+
+// ---------------- maxp (maximum profile) [OT §5.maxp] ------------
+message MaxpTable {
+  uint32 version = 1;                 // 0x00005000 or 0x00010000
+  uint32 num_glyphs = 2;
+  // Only populated for version 1.0 (TrueType).
+  uint32 max_points = 3;
+  uint32 max_contours = 4;
+  uint32 max_composite_points = 5;
+  uint32 max_composite_contours = 6;
+  uint32 max_zones = 7;
+  uint32 max_twilight_points = 8;
+  uint32 max_storage = 9;
+  uint32 max_function_defs = 10;
+  uint32 max_instruction_defs = 11;
+  uint32 max_stack_elements = 12;
+  uint32 max_size_of_instructions = 13;
+  uint32 max_component_elements = 14;
+  uint32 max_component_depth = 15;
+}
+
+// ---------------- OS/2 [OT §5.OS/2] ------------------------------
+message OS2Table {
+  uint32 version = 1;
+  int32  x_avg_char_width = 2;
+  uint32 us_weight_class = 3;
+  uint32 us_width_class = 4;
+  uint32 fs_type = 5;
+  int32  y_subscript_x_size = 6;
+  int32  y_subscript_y_size = 7;
+  int32  y_subscript_x_offset = 8;
+  int32  y_subscript_y_offset = 9;
+  int32  y_superscript_x_size = 10;
+  int32  y_superscript_y_size = 11;
+  int32  y_superscript_x_offset = 12;
+  int32  y_superscript_y_offset = 13;
+  int32  y_strikeout_size = 14;
+  int32  y_strikeout_position = 15;
+  int32  s_family_class = 16;
+  bytes  panose = 17;               // 10 bytes
+  bytes  ul_unicode_range = 18;     // 16 bytes (4 uint32)
+  string ach_vend_id = 19;          // 4 ASCII chars
+  uint32 fs_selection = 20;
+  uint32 us_first_char_index = 21;
+  uint32 us_last_char_index = 22;
+  int32  s_typo_ascender = 23;
+  int32  s_typo_descender = 24;
+  int32  s_typo_line_gap = 25;
+  uint32 us_win_ascent = 26;
+  uint32 us_win_descent = 27;
+  // v1+
+  bytes  ul_code_page_range = 28;   // 8 bytes
+  // v2+
+  int32  sx_height = 29;
+  int32  s_cap_height = 30;
+  uint32 us_default_char = 31;
+  uint32 us_break_char = 32;
+  uint32 us_max_context = 33;
+  // v5+
+  uint32 us_lower_optical_point_size = 34;
+  uint32 us_upper_optical_point_size = 35;
+  // Remaining bytes we did not model — kept verbatim.
+  bytes trailing_raw = 100;
+}
+
+// ---------------- post [OT §5.post] ------------------------------
+message PostTable {
+  int64 version_fixed = 1;          // Fixed 16.16
+  int64 italic_angle_fixed = 2;     // Fixed 16.16
+  int32 underline_position = 3;
+  int32 underline_thickness = 4;
+  uint32 is_fixed_pitch = 5;
+  uint32 min_mem_type_42 = 6;
+  uint32 max_mem_type_42 = 7;
+  uint32 min_mem_type_1 = 8;
+  uint32 max_mem_type_1 = 9;
+  // Version 2.0 / 2.5 trailing data kept verbatim.
+  bytes trailing_raw = 100;
+}
+
+// ---------------- name [OT §5.name] ------------------------------
+message NameTable {
+  uint32 version = 1;
+  uint32 count = 2;
+  uint32 storage_offset = 3;
+  repeated NameRecord records = 4;
+  // v1 language tag records, stored verbatim when present.
+  bytes v1_lang_tag_data = 5;
+  // The raw string storage; name records reference offsets into this.
+  bytes string_storage = 6;
+}
+
+message NameRecord {
+  uint32 platform_id = 1;
+  uint32 encoding_id = 2;
+  uint32 language_id = 3;
+  uint32 name_id = 4;
+  uint32 length = 5;
+  uint32 string_offset = 6; // offset into NameTable.string_storage
+  // Decoded value when the encoding is understood. Advisory only —
+  // string_storage is authoritative for Encode.
+  string decoded = 7;
+}
+
+// ---------------- cmap [OT §5.cmap] (directory only) -------------
+message CmapTable {
+  uint32 version = 1;
+  uint32 num_encoding_records = 2;
+  repeated CmapEncodingRecord encoding_records = 3;
+  // Subtable bodies as opaque bytes indexed by subtable offset; lets
+  // Encode re-emit the exact bytes without re-encoding every cmap
+  // subtable format. Structured parsers for format 4/6/10/12/13/14
+  // are a future addition.
+  map<uint32, bytes> subtable_bodies = 4;
+}
+
+message CmapEncodingRecord {
+  uint32 platform_id = 1;
+  uint32 encoding_id = 2;
+  uint32 subtable_offset = 3;
+  uint32 subtable_format = 4; // observed from the first 2 bytes of subtable
+}
+
+// ---------------- hmtx [OT §5.hmtx] ------------------------------
+message HmtxTable {
+  repeated LongHorMetric h_metrics = 1;
+  repeated int32 left_side_bearings = 2;
+}
+
+message LongHorMetric {
+  uint32 advance_width = 1;
+  int32  left_side_bearing = 2;
+}
+
+// ---------------- loca [OT §5.loca] ------------------------------
+message LocaTable {
+  // Offsets in bytes into the glyf table; (numGlyphs+1) entries.
+  repeated uint32 offsets = 1;
+  bool long_format = 2; // matches head.index_to_loc_format
+}

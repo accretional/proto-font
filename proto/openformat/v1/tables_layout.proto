@@ -1,0 +1,25 @@
+// OpenType Layout tables — STUBS for the gluon parser project.
+//
+// Empty messages reserving names + field IDs for the SfntTable.parsed
+// oneof. Bytes remain in SfntTable.raw_data until gluon lands.
+//
+// Scope:
+//   GsubTable   Glyph Substitution (lookup-based shaping).       [OT §6.GSUB]
+//   GposTable   Glyph Positioning (kerning, marks, anchors).     [OT §6.GPOS]
+//   GdefTable   Glyph Definition (classes, attach points, caret). [OT §6.GDEF]
+//   BaseTable   Baseline (per-script baseline values).           [OT §6.BASE]
+//   JstfTable   Justification (per-script priorities).           [OT §6.JSTF]
+//   MathTable   Math Layout (math typesetting constants).        [OT §6.MATH]
+
+syntax = "proto3";
+
+package openformat.v1;
+
+option go_package = "openformat/gen/go/openformat/v1;openformatv1";
+
+message GsubTable {}
+message GposTable {}
+message GdefTable {}
+message BaseTable {}
+message JstfTable {}
+message MathTable {}

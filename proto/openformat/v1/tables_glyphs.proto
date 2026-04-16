@@ -1,0 +1,28 @@
+// Glyph data tables — STUBS for the gluon parser project.
+//
+// Each message is intentionally empty. Bytes continue to live in
+// `SfntTable.raw_data`; gluon will populate these with structured
+// content as parsers land. Adding fields is backward-compatible.
+//
+// Scope:
+//   GlyfTable   TrueType outlines (contour + composite + instructions). [OT §5.glyf]
+//   CffTable    PostScript Type 2 outlines (CFF 1).                      [OT §5.CFF]
+//   Cff2Table   Variation-aware Type 2 outlines (CFF 2).                 [OT §5.CFF2]
+//   VorgTable   Vertical origins for CFF glyphs.                         [OT §5.VORG]
+//   CvtTable    Control Value Table (TT hinting constants).              [OT §5.cvt]
+//   FpgmTable   Font Program (TT hinting, runs once at font load).       [OT §5.fpgm]
+//   PrepTable   CVT Program (TT hinting, runs at each ppem change).      [OT §5.prep]
+
+syntax = "proto3";
+
+package openformat.v1;
+
+option go_package = "openformat/gen/go/openformat/v1;openformatv1";
+
+message GlyfTable {}
+message CffTable  {}
+message Cff2Table {}
+message VorgTable {}
+message CvtTable  {}
+message FpgmTable {}
+message PrepTable {}

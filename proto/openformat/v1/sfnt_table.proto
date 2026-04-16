@@ -1,0 +1,99 @@
+// SfntTable: one entry per table directory record.
+//
+// The `parsed` oneof dispatches to a subsystem-specific message in one
+// of the sibling `tables_*.proto` files. Tables whose structured
+// decomposition has not landed yet still have a named message type —
+// those messages are stubs reserved for the gluon parser project to
+// populate. Byte-exact round-trip is always preserved through
+// `raw_data` regardless of whether `parsed` is set.
+
+syntax = "proto3";
+
+package openformat.v1;
+
+option go_package = "openformat/gen/go/openformat/v1;openformatv1";
+
+import "openformat/v1/tables_core.proto";
+import "openformat/v1/tables_glyphs.proto";
+import "openformat/v1/tables_layout.proto";
+import "openformat/v1/tables_variations.proto";
+import "openformat/v1/tables_color.proto";
+import "openformat/v1/tables_metrics.proto";
+import "openformat/v1/tables_meta.proto";
+
+message SfntTable {
+  string tag = 1;        // four-character tag (raw, no null terminator)
+  uint32 tag_raw = 2;    // same value as big-endian uint32 for checksums
+  uint32 checksum = 3;   // declared checksum
+  uint32 offset = 4;     // byte offset declared in the table directory
+  uint32 length = 5;     // uncompressed length
+  bytes  raw_data = 6;   // verbatim table bytes (length = `length`)
+
+  // Structured payload. Populated by the decoder for tables it
+  // understands. Tables lacking a parser keep `parsed` empty and rely
+  // on `raw_data` for reproduction.
+  oneof parsed {
+    // Core tables (tables_core.proto) — fully decomposed today.
+    HeadTable head = 10;
+    HheaTable hhea = 11;
+    MaxpTable maxp = 12;
+    OS2Table  os2  = 13;
+    PostTable post = 14;
+    NameTable name = 15;
+    CmapTable cmap = 16;
+    HmtxTable hmtx = 17;
+    LocaTable loca = 18;
+
+    // Glyph data (tables_glyphs.proto) — gluon stubs.
+    GlyfTable glyf = 30;
+    CffTable  cff  = 31;
+    Cff2Table cff2 = 32;
+    VorgTable vorg = 33;
+    CvtTable  cvt  = 34;
+    FpgmTable fpgm = 35;
+    PrepTable prep = 36;
+
+    // Layout (tables_layout.proto) — gluon stubs.
+    GsubTable gsub = 40;
+    GposTable gpos = 41;
+    GdefTable gdef = 42;
+    BaseTable base = 43;
+    JstfTable jstf = 44;
+    MathTable math = 45;
+
+    // Variations (tables_variations.proto) — gluon stubs.
+    FvarTable fvar = 50;
+    AvarTable avar = 51;
+    StatTable stat = 52;
+    HvarTable hvar = 53;
+    VvarTable vvar = 54;
+    MvarTable mvar = 55;
+    GvarTable gvar = 56;
+
+    // Color / bitmap (tables_color.proto) — gluon stubs.
+    ColrTable colr = 60;
+    CpalTable cpal = 61;
+    SbixTable sbix = 62;
+    CbdtTable cbdt = 63;
+    CblcTable cblc = 64;
+    SvgTable  svg  = 65;
+    EbdtTable ebdt = 66;
+    EblcTable eblc = 67;
+    EbscTable ebsc = 68;
+
+    // Extra metrics (tables_metrics.proto) — gluon stubs.
+    VheaTable vhea = 70;
+    VmtxTable vmtx = 71;
+    KernTable kern = 72;
+    HdmxTable hdmx = 73;
+    LtshTable ltsh = 74;
+    VdmxTable vdmx = 75;
+    GaspTable gasp = 76;
+    PcltTable pclt = 77;
+
+    // Misc metadata (tables_meta.proto) — gluon stubs.
+    MetaTable meta = 80;
+    DsigTable dsig = 81;
+    MergTable merg = 82;
+  }
+}

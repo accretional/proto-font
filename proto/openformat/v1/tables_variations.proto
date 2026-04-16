@@ -1,0 +1,27 @@
+// Font Variations tables — STUBS for the gluon parser project.
+//
+// Empty messages reserving names + field IDs for the SfntTable.parsed
+// oneof. Bytes remain in SfntTable.raw_data until gluon lands.
+//
+// Scope:
+//   FvarTable  Font variation axes and named instances.       [OT §5.fvar]
+//   AvarTable  Axis-value segment mappings.                   [OT §5.avar]
+//   StatTable  Style attributes (axis values, design records). [OT §5.STAT]
+//   HvarTable  Horizontal-metrics variation store.            [OT §6.HVAR]
+//   VvarTable  Vertical-metrics variation store.              [OT §6.VVAR]
+//   MvarTable  Metrics variation store (OS/2, hhea, etc).     [OT §6.MVAR]
+//   GvarTable  Glyph-variation data (TT outlines).            [OT §5.gvar]
+
+syntax = "proto3";
+
+package openformat.v1;
+
+option go_package = "openformat/gen/go/openformat/v1;openformatv1";
+
+message FvarTable {}
+message AvarTable {}
+message StatTable {}
+message HvarTable {}
+message VvarTable {}
+message MvarTable {}
+message GvarTable {}
