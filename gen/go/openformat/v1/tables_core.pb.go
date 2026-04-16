@@ -1144,16 +1144,15 @@ func (x *NameRecord) GetDecoded() string {
 	return ""
 }
 
-// ---------------- cmap [OT §5.cmap] (directory only) -------------
+// ---------------- cmap [OT §5.cmap] ------------------------------
 type CmapTable struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	Version            uint32                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
 	NumEncodingRecords uint32                 `protobuf:"varint,2,opt,name=num_encoding_records,json=numEncodingRecords,proto3" json:"num_encoding_records,omitempty"`
 	EncodingRecords    []*CmapEncodingRecord  `protobuf:"bytes,3,rep,name=encoding_records,json=encodingRecords,proto3" json:"encoding_records,omitempty"`
-	// Subtable bodies as opaque bytes indexed by subtable offset; lets
-	// Encode re-emit the exact bytes without re-encoding every cmap
-	// subtable format. Structured parsers for format 4/6/10/12/13/14
-	// are a future addition.
+	// Subtable bodies as opaque bytes indexed by subtable offset. These
+	// are the source of truth for round-trip; the structured
+	// `parsed_subtable` on each encoding record is advisory.
 	SubtableBodies map[uint32][]byte `protobuf:"bytes,4,rep,name=subtable_bodies,json=subtableBodies,proto3" json:"subtable_bodies,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
@@ -1223,6 +1222,22 @@ type CmapEncodingRecord struct {
 	EncodingId     uint32                 `protobuf:"varint,2,opt,name=encoding_id,json=encodingId,proto3" json:"encoding_id,omitempty"`
 	SubtableOffset uint32                 `protobuf:"varint,3,opt,name=subtable_offset,json=subtableOffset,proto3" json:"subtable_offset,omitempty"`
 	SubtableFormat uint32                 `protobuf:"varint,4,opt,name=subtable_format,json=subtableFormat,proto3" json:"subtable_format,omitempty"` // observed from the first 2 bytes of subtable
+	// Structured view of the subtable at `subtable_offset`. Populated by
+	// the decoder for recognised formats (0, 4, 6, 10, 12, 13, 14);
+	// unrecognised formats leave this unset and keep bytes in
+	// CmapTable.subtable_bodies. Encode re-emits from subtable_bodies
+	// regardless, so editing these fields does NOT round-trip.
+	//
+	// Types that are valid to be assigned to ParsedSubtable:
+	//
+	//	*CmapEncodingRecord_Format0
+	//	*CmapEncodingRecord_Format4
+	//	*CmapEncodingRecord_Format6
+	//	*CmapEncodingRecord_Format10
+	//	*CmapEncodingRecord_Format12
+	//	*CmapEncodingRecord_Format13
+	//	*CmapEncodingRecord_Format14
+	ParsedSubtable isCmapEncodingRecord_ParsedSubtable `protobuf_oneof:"parsed_subtable"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1285,6 +1300,1011 @@ func (x *CmapEncodingRecord) GetSubtableFormat() uint32 {
 	return 0
 }
 
+func (x *CmapEncodingRecord) GetParsedSubtable() isCmapEncodingRecord_ParsedSubtable {
+	if x != nil {
+		return x.ParsedSubtable
+	}
+	return nil
+}
+
+func (x *CmapEncodingRecord) GetFormat0() *CmapSubtableFormat0 {
+	if x != nil {
+		if x, ok := x.ParsedSubtable.(*CmapEncodingRecord_Format0); ok {
+			return x.Format0
+		}
+	}
+	return nil
+}
+
+func (x *CmapEncodingRecord) GetFormat4() *CmapSubtableFormat4 {
+	if x != nil {
+		if x, ok := x.ParsedSubtable.(*CmapEncodingRecord_Format4); ok {
+			return x.Format4
+		}
+	}
+	return nil
+}
+
+func (x *CmapEncodingRecord) GetFormat6() *CmapSubtableFormat6 {
+	if x != nil {
+		if x, ok := x.ParsedSubtable.(*CmapEncodingRecord_Format6); ok {
+			return x.Format6
+		}
+	}
+	return nil
+}
+
+func (x *CmapEncodingRecord) GetFormat10() *CmapSubtableFormat10 {
+	if x != nil {
+		if x, ok := x.ParsedSubtable.(*CmapEncodingRecord_Format10); ok {
+			return x.Format10
+		}
+	}
+	return nil
+}
+
+func (x *CmapEncodingRecord) GetFormat12() *CmapSubtableFormat12 {
+	if x != nil {
+		if x, ok := x.ParsedSubtable.(*CmapEncodingRecord_Format12); ok {
+			return x.Format12
+		}
+	}
+	return nil
+}
+
+func (x *CmapEncodingRecord) GetFormat13() *CmapSubtableFormat13 {
+	if x != nil {
+		if x, ok := x.ParsedSubtable.(*CmapEncodingRecord_Format13); ok {
+			return x.Format13
+		}
+	}
+	return nil
+}
+
+func (x *CmapEncodingRecord) GetFormat14() *CmapSubtableFormat14 {
+	if x != nil {
+		if x, ok := x.ParsedSubtable.(*CmapEncodingRecord_Format14); ok {
+			return x.Format14
+		}
+	}
+	return nil
+}
+
+type isCmapEncodingRecord_ParsedSubtable interface {
+	isCmapEncodingRecord_ParsedSubtable()
+}
+
+type CmapEncodingRecord_Format0 struct {
+	Format0 *CmapSubtableFormat0 `protobuf:"bytes,5,opt,name=format0,proto3,oneof"`
+}
+
+type CmapEncodingRecord_Format4 struct {
+	Format4 *CmapSubtableFormat4 `protobuf:"bytes,6,opt,name=format4,proto3,oneof"`
+}
+
+type CmapEncodingRecord_Format6 struct {
+	Format6 *CmapSubtableFormat6 `protobuf:"bytes,7,opt,name=format6,proto3,oneof"`
+}
+
+type CmapEncodingRecord_Format10 struct {
+	Format10 *CmapSubtableFormat10 `protobuf:"bytes,8,opt,name=format10,proto3,oneof"`
+}
+
+type CmapEncodingRecord_Format12 struct {
+	Format12 *CmapSubtableFormat12 `protobuf:"bytes,9,opt,name=format12,proto3,oneof"`
+}
+
+type CmapEncodingRecord_Format13 struct {
+	Format13 *CmapSubtableFormat13 `protobuf:"bytes,10,opt,name=format13,proto3,oneof"`
+}
+
+type CmapEncodingRecord_Format14 struct {
+	Format14 *CmapSubtableFormat14 `protobuf:"bytes,11,opt,name=format14,proto3,oneof"`
+}
+
+func (*CmapEncodingRecord_Format0) isCmapEncodingRecord_ParsedSubtable() {}
+
+func (*CmapEncodingRecord_Format4) isCmapEncodingRecord_ParsedSubtable() {}
+
+func (*CmapEncodingRecord_Format6) isCmapEncodingRecord_ParsedSubtable() {}
+
+func (*CmapEncodingRecord_Format10) isCmapEncodingRecord_ParsedSubtable() {}
+
+func (*CmapEncodingRecord_Format12) isCmapEncodingRecord_ParsedSubtable() {}
+
+func (*CmapEncodingRecord_Format13) isCmapEncodingRecord_ParsedSubtable() {}
+
+func (*CmapEncodingRecord_Format14) isCmapEncodingRecord_ParsedSubtable() {}
+
+// Format 0: byte encoding (legacy — 256 glyph IDs in an array).
+type CmapSubtableFormat0 struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Length        uint32                 `protobuf:"varint,1,opt,name=length,proto3" json:"length,omitempty"`
+	Language      uint32                 `protobuf:"varint,2,opt,name=language,proto3" json:"language,omitempty"`
+	GlyphIdArray  []byte                 `protobuf:"bytes,3,opt,name=glyph_id_array,json=glyphIdArray,proto3" json:"glyph_id_array,omitempty"` // exactly 256 bytes
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CmapSubtableFormat0) Reset() {
+	*x = CmapSubtableFormat0{}
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CmapSubtableFormat0) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CmapSubtableFormat0) ProtoMessage() {}
+
+func (x *CmapSubtableFormat0) ProtoReflect() protoreflect.Message {
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CmapSubtableFormat0.ProtoReflect.Descriptor instead.
+func (*CmapSubtableFormat0) Descriptor() ([]byte, []int) {
+	return file_openformat_v1_tables_core_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *CmapSubtableFormat0) GetLength() uint32 {
+	if x != nil {
+		return x.Length
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat0) GetLanguage() uint32 {
+	if x != nil {
+		return x.Language
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat0) GetGlyphIdArray() []byte {
+	if x != nil {
+		return x.GlyphIdArray
+	}
+	return nil
+}
+
+// Format 4: segment mapping to delta values (BMP workhorse).
+type CmapSubtableFormat4 struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Length        uint32                 `protobuf:"varint,1,opt,name=length,proto3" json:"length,omitempty"`
+	Language      uint32                 `protobuf:"varint,2,opt,name=language,proto3" json:"language,omitempty"`
+	SegCountX2    uint32                 `protobuf:"varint,3,opt,name=seg_count_x2,json=segCountX2,proto3" json:"seg_count_x2,omitempty"`
+	SearchRange   uint32                 `protobuf:"varint,4,opt,name=search_range,json=searchRange,proto3" json:"search_range,omitempty"`
+	EntrySelector uint32                 `protobuf:"varint,5,opt,name=entry_selector,json=entrySelector,proto3" json:"entry_selector,omitempty"`
+	RangeShift    uint32                 `protobuf:"varint,6,opt,name=range_shift,json=rangeShift,proto3" json:"range_shift,omitempty"`
+	// Each slice has `seg_count_x2 / 2` entries.
+	EndCode       []uint32 `protobuf:"varint,7,rep,packed,name=end_code,json=endCode,proto3" json:"end_code,omitempty"`
+	StartCode     []uint32 `protobuf:"varint,8,rep,packed,name=start_code,json=startCode,proto3" json:"start_code,omitempty"`
+	IdDelta       []int32  `protobuf:"varint,9,rep,packed,name=id_delta,json=idDelta,proto3" json:"id_delta,omitempty"` // signed
+	IdRangeOffset []uint32 `protobuf:"varint,10,rep,packed,name=id_range_offset,json=idRangeOffset,proto3" json:"id_range_offset,omitempty"`
+	// Remainder of the subtable: glyph indices referenced by id_range_offset.
+	GlyphIdArray  []uint32 `protobuf:"varint,11,rep,packed,name=glyph_id_array,json=glyphIdArray,proto3" json:"glyph_id_array,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CmapSubtableFormat4) Reset() {
+	*x = CmapSubtableFormat4{}
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CmapSubtableFormat4) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CmapSubtableFormat4) ProtoMessage() {}
+
+func (x *CmapSubtableFormat4) ProtoReflect() protoreflect.Message {
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CmapSubtableFormat4.ProtoReflect.Descriptor instead.
+func (*CmapSubtableFormat4) Descriptor() ([]byte, []int) {
+	return file_openformat_v1_tables_core_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *CmapSubtableFormat4) GetLength() uint32 {
+	if x != nil {
+		return x.Length
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat4) GetLanguage() uint32 {
+	if x != nil {
+		return x.Language
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat4) GetSegCountX2() uint32 {
+	if x != nil {
+		return x.SegCountX2
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat4) GetSearchRange() uint32 {
+	if x != nil {
+		return x.SearchRange
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat4) GetEntrySelector() uint32 {
+	if x != nil {
+		return x.EntrySelector
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat4) GetRangeShift() uint32 {
+	if x != nil {
+		return x.RangeShift
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat4) GetEndCode() []uint32 {
+	if x != nil {
+		return x.EndCode
+	}
+	return nil
+}
+
+func (x *CmapSubtableFormat4) GetStartCode() []uint32 {
+	if x != nil {
+		return x.StartCode
+	}
+	return nil
+}
+
+func (x *CmapSubtableFormat4) GetIdDelta() []int32 {
+	if x != nil {
+		return x.IdDelta
+	}
+	return nil
+}
+
+func (x *CmapSubtableFormat4) GetIdRangeOffset() []uint32 {
+	if x != nil {
+		return x.IdRangeOffset
+	}
+	return nil
+}
+
+func (x *CmapSubtableFormat4) GetGlyphIdArray() []uint32 {
+	if x != nil {
+		return x.GlyphIdArray
+	}
+	return nil
+}
+
+// Format 6: trimmed table mapping.
+type CmapSubtableFormat6 struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Length        uint32                 `protobuf:"varint,1,opt,name=length,proto3" json:"length,omitempty"`
+	Language      uint32                 `protobuf:"varint,2,opt,name=language,proto3" json:"language,omitempty"`
+	FirstCode     uint32                 `protobuf:"varint,3,opt,name=first_code,json=firstCode,proto3" json:"first_code,omitempty"`
+	EntryCount    uint32                 `protobuf:"varint,4,opt,name=entry_count,json=entryCount,proto3" json:"entry_count,omitempty"`
+	GlyphIdArray  []uint32               `protobuf:"varint,5,rep,packed,name=glyph_id_array,json=glyphIdArray,proto3" json:"glyph_id_array,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CmapSubtableFormat6) Reset() {
+	*x = CmapSubtableFormat6{}
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CmapSubtableFormat6) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CmapSubtableFormat6) ProtoMessage() {}
+
+func (x *CmapSubtableFormat6) ProtoReflect() protoreflect.Message {
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CmapSubtableFormat6.ProtoReflect.Descriptor instead.
+func (*CmapSubtableFormat6) Descriptor() ([]byte, []int) {
+	return file_openformat_v1_tables_core_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *CmapSubtableFormat6) GetLength() uint32 {
+	if x != nil {
+		return x.Length
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat6) GetLanguage() uint32 {
+	if x != nil {
+		return x.Language
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat6) GetFirstCode() uint32 {
+	if x != nil {
+		return x.FirstCode
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat6) GetEntryCount() uint32 {
+	if x != nil {
+		return x.EntryCount
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat6) GetGlyphIdArray() []uint32 {
+	if x != nil {
+		return x.GlyphIdArray
+	}
+	return nil
+}
+
+// Format 10: trimmed array (32-bit characters).
+type CmapSubtableFormat10 struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Length        uint32                 `protobuf:"varint,1,opt,name=length,proto3" json:"length,omitempty"`
+	Language      uint32                 `protobuf:"varint,2,opt,name=language,proto3" json:"language,omitempty"`
+	StartCharCode uint32                 `protobuf:"varint,3,opt,name=start_char_code,json=startCharCode,proto3" json:"start_char_code,omitempty"`
+	NumChars      uint32                 `protobuf:"varint,4,opt,name=num_chars,json=numChars,proto3" json:"num_chars,omitempty"`
+	GlyphIdArray  []uint32               `protobuf:"varint,5,rep,packed,name=glyph_id_array,json=glyphIdArray,proto3" json:"glyph_id_array,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CmapSubtableFormat10) Reset() {
+	*x = CmapSubtableFormat10{}
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CmapSubtableFormat10) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CmapSubtableFormat10) ProtoMessage() {}
+
+func (x *CmapSubtableFormat10) ProtoReflect() protoreflect.Message {
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CmapSubtableFormat10.ProtoReflect.Descriptor instead.
+func (*CmapSubtableFormat10) Descriptor() ([]byte, []int) {
+	return file_openformat_v1_tables_core_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *CmapSubtableFormat10) GetLength() uint32 {
+	if x != nil {
+		return x.Length
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat10) GetLanguage() uint32 {
+	if x != nil {
+		return x.Language
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat10) GetStartCharCode() uint32 {
+	if x != nil {
+		return x.StartCharCode
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat10) GetNumChars() uint32 {
+	if x != nil {
+		return x.NumChars
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat10) GetGlyphIdArray() []uint32 {
+	if x != nil {
+		return x.GlyphIdArray
+	}
+	return nil
+}
+
+// Format 12: segmented coverage (32-bit characters, sequential).
+type CmapSubtableFormat12 struct {
+	state         protoimpl.MessageState    `protogen:"open.v1"`
+	Length        uint32                    `protobuf:"varint,1,opt,name=length,proto3" json:"length,omitempty"`
+	Language      uint32                    `protobuf:"varint,2,opt,name=language,proto3" json:"language,omitempty"`
+	Groups        []*CmapSequentialMapGroup `protobuf:"bytes,3,rep,name=groups,proto3" json:"groups,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CmapSubtableFormat12) Reset() {
+	*x = CmapSubtableFormat12{}
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CmapSubtableFormat12) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CmapSubtableFormat12) ProtoMessage() {}
+
+func (x *CmapSubtableFormat12) ProtoReflect() protoreflect.Message {
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CmapSubtableFormat12.ProtoReflect.Descriptor instead.
+func (*CmapSubtableFormat12) Descriptor() ([]byte, []int) {
+	return file_openformat_v1_tables_core_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *CmapSubtableFormat12) GetLength() uint32 {
+	if x != nil {
+		return x.Length
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat12) GetLanguage() uint32 {
+	if x != nil {
+		return x.Language
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat12) GetGroups() []*CmapSequentialMapGroup {
+	if x != nil {
+		return x.Groups
+	}
+	return nil
+}
+
+type CmapSequentialMapGroup struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	StartCharCode uint32                 `protobuf:"varint,1,opt,name=start_char_code,json=startCharCode,proto3" json:"start_char_code,omitempty"`
+	EndCharCode   uint32                 `protobuf:"varint,2,opt,name=end_char_code,json=endCharCode,proto3" json:"end_char_code,omitempty"`
+	StartGlyphId  uint32                 `protobuf:"varint,3,opt,name=start_glyph_id,json=startGlyphId,proto3" json:"start_glyph_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CmapSequentialMapGroup) Reset() {
+	*x = CmapSequentialMapGroup{}
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CmapSequentialMapGroup) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CmapSequentialMapGroup) ProtoMessage() {}
+
+func (x *CmapSequentialMapGroup) ProtoReflect() protoreflect.Message {
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CmapSequentialMapGroup.ProtoReflect.Descriptor instead.
+func (*CmapSequentialMapGroup) Descriptor() ([]byte, []int) {
+	return file_openformat_v1_tables_core_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *CmapSequentialMapGroup) GetStartCharCode() uint32 {
+	if x != nil {
+		return x.StartCharCode
+	}
+	return 0
+}
+
+func (x *CmapSequentialMapGroup) GetEndCharCode() uint32 {
+	if x != nil {
+		return x.EndCharCode
+	}
+	return 0
+}
+
+func (x *CmapSequentialMapGroup) GetStartGlyphId() uint32 {
+	if x != nil {
+		return x.StartGlyphId
+	}
+	return 0
+}
+
+// Format 13: many-to-one range mappings (last-resort fonts).
+type CmapSubtableFormat13 struct {
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	Length        uint32                  `protobuf:"varint,1,opt,name=length,proto3" json:"length,omitempty"`
+	Language      uint32                  `protobuf:"varint,2,opt,name=language,proto3" json:"language,omitempty"`
+	Groups        []*CmapConstantMapGroup `protobuf:"bytes,3,rep,name=groups,proto3" json:"groups,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CmapSubtableFormat13) Reset() {
+	*x = CmapSubtableFormat13{}
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CmapSubtableFormat13) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CmapSubtableFormat13) ProtoMessage() {}
+
+func (x *CmapSubtableFormat13) ProtoReflect() protoreflect.Message {
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CmapSubtableFormat13.ProtoReflect.Descriptor instead.
+func (*CmapSubtableFormat13) Descriptor() ([]byte, []int) {
+	return file_openformat_v1_tables_core_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *CmapSubtableFormat13) GetLength() uint32 {
+	if x != nil {
+		return x.Length
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat13) GetLanguage() uint32 {
+	if x != nil {
+		return x.Language
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat13) GetGroups() []*CmapConstantMapGroup {
+	if x != nil {
+		return x.Groups
+	}
+	return nil
+}
+
+type CmapConstantMapGroup struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	StartCharCode uint32                 `protobuf:"varint,1,opt,name=start_char_code,json=startCharCode,proto3" json:"start_char_code,omitempty"`
+	EndCharCode   uint32                 `protobuf:"varint,2,opt,name=end_char_code,json=endCharCode,proto3" json:"end_char_code,omitempty"`
+	GlyphId       uint32                 `protobuf:"varint,3,opt,name=glyph_id,json=glyphId,proto3" json:"glyph_id,omitempty"` // applies to every code point in the range
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CmapConstantMapGroup) Reset() {
+	*x = CmapConstantMapGroup{}
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CmapConstantMapGroup) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CmapConstantMapGroup) ProtoMessage() {}
+
+func (x *CmapConstantMapGroup) ProtoReflect() protoreflect.Message {
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CmapConstantMapGroup.ProtoReflect.Descriptor instead.
+func (*CmapConstantMapGroup) Descriptor() ([]byte, []int) {
+	return file_openformat_v1_tables_core_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *CmapConstantMapGroup) GetStartCharCode() uint32 {
+	if x != nil {
+		return x.StartCharCode
+	}
+	return 0
+}
+
+func (x *CmapConstantMapGroup) GetEndCharCode() uint32 {
+	if x != nil {
+		return x.EndCharCode
+	}
+	return 0
+}
+
+func (x *CmapConstantMapGroup) GetGlyphId() uint32 {
+	if x != nil {
+		return x.GlyphId
+	}
+	return 0
+}
+
+// Format 14: Unicode Variation Sequences.
+type CmapSubtableFormat14 struct {
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	Length        uint32                   `protobuf:"varint,1,opt,name=length,proto3" json:"length,omitempty"`
+	VarSelectors  []*CmapVariationSelector `protobuf:"bytes,2,rep,name=var_selectors,json=varSelectors,proto3" json:"var_selectors,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CmapSubtableFormat14) Reset() {
+	*x = CmapSubtableFormat14{}
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CmapSubtableFormat14) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CmapSubtableFormat14) ProtoMessage() {}
+
+func (x *CmapSubtableFormat14) ProtoReflect() protoreflect.Message {
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CmapSubtableFormat14.ProtoReflect.Descriptor instead.
+func (*CmapSubtableFormat14) Descriptor() ([]byte, []int) {
+	return file_openformat_v1_tables_core_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *CmapSubtableFormat14) GetLength() uint32 {
+	if x != nil {
+		return x.Length
+	}
+	return 0
+}
+
+func (x *CmapSubtableFormat14) GetVarSelectors() []*CmapVariationSelector {
+	if x != nil {
+		return x.VarSelectors
+	}
+	return nil
+}
+
+type CmapVariationSelector struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	VarSelector   uint32                 `protobuf:"varint,1,opt,name=var_selector,json=varSelector,proto3" json:"var_selector,omitempty"`        // 24-bit VS code point
+	DefaultUvs    *CmapDefaultUVS        `protobuf:"bytes,2,opt,name=default_uvs,json=defaultUvs,proto3" json:"default_uvs,omitempty"`            // optional
+	NonDefaultUvs *CmapNonDefaultUVS     `protobuf:"bytes,3,opt,name=non_default_uvs,json=nonDefaultUvs,proto3" json:"non_default_uvs,omitempty"` // optional
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CmapVariationSelector) Reset() {
+	*x = CmapVariationSelector{}
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CmapVariationSelector) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CmapVariationSelector) ProtoMessage() {}
+
+func (x *CmapVariationSelector) ProtoReflect() protoreflect.Message {
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CmapVariationSelector.ProtoReflect.Descriptor instead.
+func (*CmapVariationSelector) Descriptor() ([]byte, []int) {
+	return file_openformat_v1_tables_core_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *CmapVariationSelector) GetVarSelector() uint32 {
+	if x != nil {
+		return x.VarSelector
+	}
+	return 0
+}
+
+func (x *CmapVariationSelector) GetDefaultUvs() *CmapDefaultUVS {
+	if x != nil {
+		return x.DefaultUvs
+	}
+	return nil
+}
+
+func (x *CmapVariationSelector) GetNonDefaultUvs() *CmapNonDefaultUVS {
+	if x != nil {
+		return x.NonDefaultUvs
+	}
+	return nil
+}
+
+type CmapDefaultUVS struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ranges        []*CmapUnicodeRange    `protobuf:"bytes,1,rep,name=ranges,proto3" json:"ranges,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CmapDefaultUVS) Reset() {
+	*x = CmapDefaultUVS{}
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CmapDefaultUVS) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CmapDefaultUVS) ProtoMessage() {}
+
+func (x *CmapDefaultUVS) ProtoReflect() protoreflect.Message {
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CmapDefaultUVS.ProtoReflect.Descriptor instead.
+func (*CmapDefaultUVS) Descriptor() ([]byte, []int) {
+	return file_openformat_v1_tables_core_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *CmapDefaultUVS) GetRanges() []*CmapUnicodeRange {
+	if x != nil {
+		return x.Ranges
+	}
+	return nil
+}
+
+type CmapUnicodeRange struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	StartUnicodeValue uint32                 `protobuf:"varint,1,opt,name=start_unicode_value,json=startUnicodeValue,proto3" json:"start_unicode_value,omitempty"` // 24-bit
+	AdditionalCount   uint32                 `protobuf:"varint,2,opt,name=additional_count,json=additionalCount,proto3" json:"additional_count,omitempty"`         // extra code points beyond start
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *CmapUnicodeRange) Reset() {
+	*x = CmapUnicodeRange{}
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CmapUnicodeRange) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CmapUnicodeRange) ProtoMessage() {}
+
+func (x *CmapUnicodeRange) ProtoReflect() protoreflect.Message {
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CmapUnicodeRange.ProtoReflect.Descriptor instead.
+func (*CmapUnicodeRange) Descriptor() ([]byte, []int) {
+	return file_openformat_v1_tables_core_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *CmapUnicodeRange) GetStartUnicodeValue() uint32 {
+	if x != nil {
+		return x.StartUnicodeValue
+	}
+	return 0
+}
+
+func (x *CmapUnicodeRange) GetAdditionalCount() uint32 {
+	if x != nil {
+		return x.AdditionalCount
+	}
+	return 0
+}
+
+type CmapNonDefaultUVS struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Mappings      []*CmapUVSMapping      `protobuf:"bytes,1,rep,name=mappings,proto3" json:"mappings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CmapNonDefaultUVS) Reset() {
+	*x = CmapNonDefaultUVS{}
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CmapNonDefaultUVS) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CmapNonDefaultUVS) ProtoMessage() {}
+
+func (x *CmapNonDefaultUVS) ProtoReflect() protoreflect.Message {
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CmapNonDefaultUVS.ProtoReflect.Descriptor instead.
+func (*CmapNonDefaultUVS) Descriptor() ([]byte, []int) {
+	return file_openformat_v1_tables_core_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *CmapNonDefaultUVS) GetMappings() []*CmapUVSMapping {
+	if x != nil {
+		return x.Mappings
+	}
+	return nil
+}
+
+type CmapUVSMapping struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UnicodeValue  uint32                 `protobuf:"varint,1,opt,name=unicode_value,json=unicodeValue,proto3" json:"unicode_value,omitempty"` // 24-bit
+	GlyphId       uint32                 `protobuf:"varint,2,opt,name=glyph_id,json=glyphId,proto3" json:"glyph_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CmapUVSMapping) Reset() {
+	*x = CmapUVSMapping{}
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CmapUVSMapping) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CmapUVSMapping) ProtoMessage() {}
+
+func (x *CmapUVSMapping) ProtoReflect() protoreflect.Message {
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CmapUVSMapping.ProtoReflect.Descriptor instead.
+func (*CmapUVSMapping) Descriptor() ([]byte, []int) {
+	return file_openformat_v1_tables_core_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *CmapUVSMapping) GetUnicodeValue() uint32 {
+	if x != nil {
+		return x.UnicodeValue
+	}
+	return 0
+}
+
+func (x *CmapUVSMapping) GetGlyphId() uint32 {
+	if x != nil {
+		return x.GlyphId
+	}
+	return 0
+}
+
 // ---------------- hmtx [OT §5.hmtx] ------------------------------
 type HmtxTable struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
@@ -1296,7 +2316,7 @@ type HmtxTable struct {
 
 func (x *HmtxTable) Reset() {
 	*x = HmtxTable{}
-	mi := &file_openformat_v1_tables_core_proto_msgTypes[9]
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1308,7 +2328,7 @@ func (x *HmtxTable) String() string {
 func (*HmtxTable) ProtoMessage() {}
 
 func (x *HmtxTable) ProtoReflect() protoreflect.Message {
-	mi := &file_openformat_v1_tables_core_proto_msgTypes[9]
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1321,7 +2341,7 @@ func (x *HmtxTable) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HmtxTable.ProtoReflect.Descriptor instead.
 func (*HmtxTable) Descriptor() ([]byte, []int) {
-	return file_openformat_v1_tables_core_proto_rawDescGZIP(), []int{9}
+	return file_openformat_v1_tables_core_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *HmtxTable) GetHMetrics() []*LongHorMetric {
@@ -1348,7 +2368,7 @@ type LongHorMetric struct {
 
 func (x *LongHorMetric) Reset() {
 	*x = LongHorMetric{}
-	mi := &file_openformat_v1_tables_core_proto_msgTypes[10]
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1360,7 +2380,7 @@ func (x *LongHorMetric) String() string {
 func (*LongHorMetric) ProtoMessage() {}
 
 func (x *LongHorMetric) ProtoReflect() protoreflect.Message {
-	mi := &file_openformat_v1_tables_core_proto_msgTypes[10]
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1373,7 +2393,7 @@ func (x *LongHorMetric) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LongHorMetric.ProtoReflect.Descriptor instead.
 func (*LongHorMetric) Descriptor() ([]byte, []int) {
-	return file_openformat_v1_tables_core_proto_rawDescGZIP(), []int{10}
+	return file_openformat_v1_tables_core_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *LongHorMetric) GetAdvanceWidth() uint32 {
@@ -1402,7 +2422,7 @@ type LocaTable struct {
 
 func (x *LocaTable) Reset() {
 	*x = LocaTable{}
-	mi := &file_openformat_v1_tables_core_proto_msgTypes[11]
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1414,7 +2434,7 @@ func (x *LocaTable) String() string {
 func (*LocaTable) ProtoMessage() {}
 
 func (x *LocaTable) ProtoReflect() protoreflect.Message {
-	mi := &file_openformat_v1_tables_core_proto_msgTypes[11]
+	mi := &file_openformat_v1_tables_core_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1427,7 +2447,7 @@ func (x *LocaTable) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LocaTable.ProtoReflect.Descriptor instead.
 func (*LocaTable) Descriptor() ([]byte, []int) {
-	return file_openformat_v1_tables_core_proto_rawDescGZIP(), []int{11}
+	return file_openformat_v1_tables_core_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *LocaTable) GetOffsets() []uint32 {
@@ -1583,14 +2603,91 @@ const file_openformat_v1_tables_core_proto_rawDesc = "" +
 	"\x0fsubtable_bodies\x18\x04 \x03(\v2,.openformat.v1.CmapTable.SubtableBodiesEntryR\x0esubtableBodies\x1aA\n" +
 	"\x13SubtableBodiesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\rR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01\"\xa8\x01\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01\"\x87\x05\n" +
 	"\x12CmapEncodingRecord\x12\x1f\n" +
 	"\vplatform_id\x18\x01 \x01(\rR\n" +
 	"platformId\x12\x1f\n" +
 	"\vencoding_id\x18\x02 \x01(\rR\n" +
 	"encodingId\x12'\n" +
 	"\x0fsubtable_offset\x18\x03 \x01(\rR\x0esubtableOffset\x12'\n" +
-	"\x0fsubtable_format\x18\x04 \x01(\rR\x0esubtableFormat\"t\n" +
+	"\x0fsubtable_format\x18\x04 \x01(\rR\x0esubtableFormat\x12>\n" +
+	"\aformat0\x18\x05 \x01(\v2\".openformat.v1.CmapSubtableFormat0H\x00R\aformat0\x12>\n" +
+	"\aformat4\x18\x06 \x01(\v2\".openformat.v1.CmapSubtableFormat4H\x00R\aformat4\x12>\n" +
+	"\aformat6\x18\a \x01(\v2\".openformat.v1.CmapSubtableFormat6H\x00R\aformat6\x12A\n" +
+	"\bformat10\x18\b \x01(\v2#.openformat.v1.CmapSubtableFormat10H\x00R\bformat10\x12A\n" +
+	"\bformat12\x18\t \x01(\v2#.openformat.v1.CmapSubtableFormat12H\x00R\bformat12\x12A\n" +
+	"\bformat13\x18\n" +
+	" \x01(\v2#.openformat.v1.CmapSubtableFormat13H\x00R\bformat13\x12A\n" +
+	"\bformat14\x18\v \x01(\v2#.openformat.v1.CmapSubtableFormat14H\x00R\bformat14B\x11\n" +
+	"\x0fparsed_subtable\"o\n" +
+	"\x13CmapSubtableFormat0\x12\x16\n" +
+	"\x06length\x18\x01 \x01(\rR\x06length\x12\x1a\n" +
+	"\blanguage\x18\x02 \x01(\rR\blanguage\x12$\n" +
+	"\x0eglyph_id_array\x18\x03 \x01(\fR\fglyphIdArray\"\xf9\x02\n" +
+	"\x13CmapSubtableFormat4\x12\x16\n" +
+	"\x06length\x18\x01 \x01(\rR\x06length\x12\x1a\n" +
+	"\blanguage\x18\x02 \x01(\rR\blanguage\x12 \n" +
+	"\fseg_count_x2\x18\x03 \x01(\rR\n" +
+	"segCountX2\x12!\n" +
+	"\fsearch_range\x18\x04 \x01(\rR\vsearchRange\x12%\n" +
+	"\x0eentry_selector\x18\x05 \x01(\rR\rentrySelector\x12\x1f\n" +
+	"\vrange_shift\x18\x06 \x01(\rR\n" +
+	"rangeShift\x12\x19\n" +
+	"\bend_code\x18\a \x03(\rR\aendCode\x12\x1d\n" +
+	"\n" +
+	"start_code\x18\b \x03(\rR\tstartCode\x12\x19\n" +
+	"\bid_delta\x18\t \x03(\x05R\aidDelta\x12&\n" +
+	"\x0fid_range_offset\x18\n" +
+	" \x03(\rR\ridRangeOffset\x12$\n" +
+	"\x0eglyph_id_array\x18\v \x03(\rR\fglyphIdArray\"\xaf\x01\n" +
+	"\x13CmapSubtableFormat6\x12\x16\n" +
+	"\x06length\x18\x01 \x01(\rR\x06length\x12\x1a\n" +
+	"\blanguage\x18\x02 \x01(\rR\blanguage\x12\x1d\n" +
+	"\n" +
+	"first_code\x18\x03 \x01(\rR\tfirstCode\x12\x1f\n" +
+	"\ventry_count\x18\x04 \x01(\rR\n" +
+	"entryCount\x12$\n" +
+	"\x0eglyph_id_array\x18\x05 \x03(\rR\fglyphIdArray\"\xb5\x01\n" +
+	"\x14CmapSubtableFormat10\x12\x16\n" +
+	"\x06length\x18\x01 \x01(\rR\x06length\x12\x1a\n" +
+	"\blanguage\x18\x02 \x01(\rR\blanguage\x12&\n" +
+	"\x0fstart_char_code\x18\x03 \x01(\rR\rstartCharCode\x12\x1b\n" +
+	"\tnum_chars\x18\x04 \x01(\rR\bnumChars\x12$\n" +
+	"\x0eglyph_id_array\x18\x05 \x03(\rR\fglyphIdArray\"\x89\x01\n" +
+	"\x14CmapSubtableFormat12\x12\x16\n" +
+	"\x06length\x18\x01 \x01(\rR\x06length\x12\x1a\n" +
+	"\blanguage\x18\x02 \x01(\rR\blanguage\x12=\n" +
+	"\x06groups\x18\x03 \x03(\v2%.openformat.v1.CmapSequentialMapGroupR\x06groups\"\x8a\x01\n" +
+	"\x16CmapSequentialMapGroup\x12&\n" +
+	"\x0fstart_char_code\x18\x01 \x01(\rR\rstartCharCode\x12\"\n" +
+	"\rend_char_code\x18\x02 \x01(\rR\vendCharCode\x12$\n" +
+	"\x0estart_glyph_id\x18\x03 \x01(\rR\fstartGlyphId\"\x87\x01\n" +
+	"\x14CmapSubtableFormat13\x12\x16\n" +
+	"\x06length\x18\x01 \x01(\rR\x06length\x12\x1a\n" +
+	"\blanguage\x18\x02 \x01(\rR\blanguage\x12;\n" +
+	"\x06groups\x18\x03 \x03(\v2#.openformat.v1.CmapConstantMapGroupR\x06groups\"}\n" +
+	"\x14CmapConstantMapGroup\x12&\n" +
+	"\x0fstart_char_code\x18\x01 \x01(\rR\rstartCharCode\x12\"\n" +
+	"\rend_char_code\x18\x02 \x01(\rR\vendCharCode\x12\x19\n" +
+	"\bglyph_id\x18\x03 \x01(\rR\aglyphId\"y\n" +
+	"\x14CmapSubtableFormat14\x12\x16\n" +
+	"\x06length\x18\x01 \x01(\rR\x06length\x12I\n" +
+	"\rvar_selectors\x18\x02 \x03(\v2$.openformat.v1.CmapVariationSelectorR\fvarSelectors\"\xc4\x01\n" +
+	"\x15CmapVariationSelector\x12!\n" +
+	"\fvar_selector\x18\x01 \x01(\rR\vvarSelector\x12>\n" +
+	"\vdefault_uvs\x18\x02 \x01(\v2\x1d.openformat.v1.CmapDefaultUVSR\n" +
+	"defaultUvs\x12H\n" +
+	"\x0fnon_default_uvs\x18\x03 \x01(\v2 .openformat.v1.CmapNonDefaultUVSR\rnonDefaultUvs\"I\n" +
+	"\x0eCmapDefaultUVS\x127\n" +
+	"\x06ranges\x18\x01 \x03(\v2\x1f.openformat.v1.CmapUnicodeRangeR\x06ranges\"m\n" +
+	"\x10CmapUnicodeRange\x12.\n" +
+	"\x13start_unicode_value\x18\x01 \x01(\rR\x11startUnicodeValue\x12)\n" +
+	"\x10additional_count\x18\x02 \x01(\rR\x0fadditionalCount\"N\n" +
+	"\x11CmapNonDefaultUVS\x129\n" +
+	"\bmappings\x18\x01 \x03(\v2\x1d.openformat.v1.CmapUVSMappingR\bmappings\"P\n" +
+	"\x0eCmapUVSMapping\x12#\n" +
+	"\runicode_value\x18\x01 \x01(\rR\funicodeValue\x12\x19\n" +
+	"\bglyph_id\x18\x02 \x01(\rR\aglyphId\"t\n" +
 	"\tHmtxTable\x129\n" +
 	"\th_metrics\x18\x01 \x03(\v2\x1c.openformat.v1.LongHorMetricR\bhMetrics\x12,\n" +
 	"\x12left_side_bearings\x18\x02 \x03(\x05R\x10leftSideBearings\"`\n" +
@@ -1614,32 +2711,60 @@ func file_openformat_v1_tables_core_proto_rawDescGZIP() []byte {
 	return file_openformat_v1_tables_core_proto_rawDescData
 }
 
-var file_openformat_v1_tables_core_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_openformat_v1_tables_core_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_openformat_v1_tables_core_proto_goTypes = []any{
-	(*HeadTable)(nil),          // 0: openformat.v1.HeadTable
-	(*HheaTable)(nil),          // 1: openformat.v1.HheaTable
-	(*MaxpTable)(nil),          // 2: openformat.v1.MaxpTable
-	(*OS2Table)(nil),           // 3: openformat.v1.OS2Table
-	(*PostTable)(nil),          // 4: openformat.v1.PostTable
-	(*NameTable)(nil),          // 5: openformat.v1.NameTable
-	(*NameRecord)(nil),         // 6: openformat.v1.NameRecord
-	(*CmapTable)(nil),          // 7: openformat.v1.CmapTable
-	(*CmapEncodingRecord)(nil), // 8: openformat.v1.CmapEncodingRecord
-	(*HmtxTable)(nil),          // 9: openformat.v1.HmtxTable
-	(*LongHorMetric)(nil),      // 10: openformat.v1.LongHorMetric
-	(*LocaTable)(nil),          // 11: openformat.v1.LocaTable
-	nil,                        // 12: openformat.v1.CmapTable.SubtableBodiesEntry
+	(*HeadTable)(nil),              // 0: openformat.v1.HeadTable
+	(*HheaTable)(nil),              // 1: openformat.v1.HheaTable
+	(*MaxpTable)(nil),              // 2: openformat.v1.MaxpTable
+	(*OS2Table)(nil),               // 3: openformat.v1.OS2Table
+	(*PostTable)(nil),              // 4: openformat.v1.PostTable
+	(*NameTable)(nil),              // 5: openformat.v1.NameTable
+	(*NameRecord)(nil),             // 6: openformat.v1.NameRecord
+	(*CmapTable)(nil),              // 7: openformat.v1.CmapTable
+	(*CmapEncodingRecord)(nil),     // 8: openformat.v1.CmapEncodingRecord
+	(*CmapSubtableFormat0)(nil),    // 9: openformat.v1.CmapSubtableFormat0
+	(*CmapSubtableFormat4)(nil),    // 10: openformat.v1.CmapSubtableFormat4
+	(*CmapSubtableFormat6)(nil),    // 11: openformat.v1.CmapSubtableFormat6
+	(*CmapSubtableFormat10)(nil),   // 12: openformat.v1.CmapSubtableFormat10
+	(*CmapSubtableFormat12)(nil),   // 13: openformat.v1.CmapSubtableFormat12
+	(*CmapSequentialMapGroup)(nil), // 14: openformat.v1.CmapSequentialMapGroup
+	(*CmapSubtableFormat13)(nil),   // 15: openformat.v1.CmapSubtableFormat13
+	(*CmapConstantMapGroup)(nil),   // 16: openformat.v1.CmapConstantMapGroup
+	(*CmapSubtableFormat14)(nil),   // 17: openformat.v1.CmapSubtableFormat14
+	(*CmapVariationSelector)(nil),  // 18: openformat.v1.CmapVariationSelector
+	(*CmapDefaultUVS)(nil),         // 19: openformat.v1.CmapDefaultUVS
+	(*CmapUnicodeRange)(nil),       // 20: openformat.v1.CmapUnicodeRange
+	(*CmapNonDefaultUVS)(nil),      // 21: openformat.v1.CmapNonDefaultUVS
+	(*CmapUVSMapping)(nil),         // 22: openformat.v1.CmapUVSMapping
+	(*HmtxTable)(nil),              // 23: openformat.v1.HmtxTable
+	(*LongHorMetric)(nil),          // 24: openformat.v1.LongHorMetric
+	(*LocaTable)(nil),              // 25: openformat.v1.LocaTable
+	nil,                            // 26: openformat.v1.CmapTable.SubtableBodiesEntry
 }
 var file_openformat_v1_tables_core_proto_depIdxs = []int32{
 	6,  // 0: openformat.v1.NameTable.records:type_name -> openformat.v1.NameRecord
 	8,  // 1: openformat.v1.CmapTable.encoding_records:type_name -> openformat.v1.CmapEncodingRecord
-	12, // 2: openformat.v1.CmapTable.subtable_bodies:type_name -> openformat.v1.CmapTable.SubtableBodiesEntry
-	10, // 3: openformat.v1.HmtxTable.h_metrics:type_name -> openformat.v1.LongHorMetric
-	4,  // [4:4] is the sub-list for method output_type
-	4,  // [4:4] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	26, // 2: openformat.v1.CmapTable.subtable_bodies:type_name -> openformat.v1.CmapTable.SubtableBodiesEntry
+	9,  // 3: openformat.v1.CmapEncodingRecord.format0:type_name -> openformat.v1.CmapSubtableFormat0
+	10, // 4: openformat.v1.CmapEncodingRecord.format4:type_name -> openformat.v1.CmapSubtableFormat4
+	11, // 5: openformat.v1.CmapEncodingRecord.format6:type_name -> openformat.v1.CmapSubtableFormat6
+	12, // 6: openformat.v1.CmapEncodingRecord.format10:type_name -> openformat.v1.CmapSubtableFormat10
+	13, // 7: openformat.v1.CmapEncodingRecord.format12:type_name -> openformat.v1.CmapSubtableFormat12
+	15, // 8: openformat.v1.CmapEncodingRecord.format13:type_name -> openformat.v1.CmapSubtableFormat13
+	17, // 9: openformat.v1.CmapEncodingRecord.format14:type_name -> openformat.v1.CmapSubtableFormat14
+	14, // 10: openformat.v1.CmapSubtableFormat12.groups:type_name -> openformat.v1.CmapSequentialMapGroup
+	16, // 11: openformat.v1.CmapSubtableFormat13.groups:type_name -> openformat.v1.CmapConstantMapGroup
+	18, // 12: openformat.v1.CmapSubtableFormat14.var_selectors:type_name -> openformat.v1.CmapVariationSelector
+	19, // 13: openformat.v1.CmapVariationSelector.default_uvs:type_name -> openformat.v1.CmapDefaultUVS
+	21, // 14: openformat.v1.CmapVariationSelector.non_default_uvs:type_name -> openformat.v1.CmapNonDefaultUVS
+	20, // 15: openformat.v1.CmapDefaultUVS.ranges:type_name -> openformat.v1.CmapUnicodeRange
+	22, // 16: openformat.v1.CmapNonDefaultUVS.mappings:type_name -> openformat.v1.CmapUVSMapping
+	24, // 17: openformat.v1.HmtxTable.h_metrics:type_name -> openformat.v1.LongHorMetric
+	18, // [18:18] is the sub-list for method output_type
+	18, // [18:18] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_openformat_v1_tables_core_proto_init() }
@@ -1647,13 +2772,22 @@ func file_openformat_v1_tables_core_proto_init() {
 	if File_openformat_v1_tables_core_proto != nil {
 		return
 	}
+	file_openformat_v1_tables_core_proto_msgTypes[8].OneofWrappers = []any{
+		(*CmapEncodingRecord_Format0)(nil),
+		(*CmapEncodingRecord_Format4)(nil),
+		(*CmapEncodingRecord_Format6)(nil),
+		(*CmapEncodingRecord_Format10)(nil),
+		(*CmapEncodingRecord_Format12)(nil),
+		(*CmapEncodingRecord_Format13)(nil),
+		(*CmapEncodingRecord_Format14)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_openformat_v1_tables_core_proto_rawDesc), len(file_openformat_v1_tables_core_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

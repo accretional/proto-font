@@ -307,10 +307,15 @@ Append as new work comes up.
   laying out shared table bodies across fonts. Not implemented; `Encode`
   errors out.
 - **EOT synthesis**: same story as TTC — round-trip via `raw_bytes` only.
-- **cmap subtable parsing**: we expose the directory but keep subtable
-  bodies as opaque bytes. Adding structured parsers for format 4, 6, 10,
-  12, 13, 14 would let callers read character coverage without hauling
-  the raw table out.
+- **cmap subtable parsing** *(landed — formats 0, 4, 6, 10, 12, 13, 14)*:
+  the decoder now fills `CmapEncodingRecord.parsed_subtable` with a
+  format-specific message (segment arrays for fmt4, range groups for
+  fmt12/13, UVS records for fmt14, etc.) alongside the existing opaque
+  `subtable_bodies` map. Round-trip still re-emits from
+  `subtable_bodies`, so editing the parsed view does NOT affect bytes.
+  Follow-up: format 2 (high-byte CJK mapping) and format 8 (mixed
+  16/32-bit) are still unrecognised — no NotoSans fixture exercises
+  them today.
 - **`head.checkSumAdjustment` recompute** *(landed)*: `encodeSFNT`
   zeroes the field, sums every uint32 word across the whole laid-out
   file, and writes `0xB1B0AFBA − sum` back. The head table's own

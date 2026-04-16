@@ -292,6 +292,12 @@ func parseCmapDirectory(b []byte) (*pb.CmapTable, error) {
 				c.SubtableBodies[off] = append([]byte(nil), b[off:end]...)
 			}
 		}
+		if body, ok := c.SubtableBodies[off]; ok {
+			// Errors here are non-fatal: a malformed subtable shouldn't
+			// block decode of the rest of the font. Round-trip stays
+			// byte-exact via subtable_bodies.
+			_ = populateCmapSubtable(rec, body)
+		}
 	}
 	return c, nil
 }

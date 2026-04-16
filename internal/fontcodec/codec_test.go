@@ -372,6 +372,77 @@ func TestWOFF2EncodeRoundTrip(t *testing.T) {
 	}
 }
 
+// TestCmapSubtableParsing runs decode on a real Noto font and verifies
+// its cmap encoding records carry structured ParsedSubtable payloads
+// with format-consistent contents. Round-trip byte-exactness is NOT
+// affected — subtable_bodies is still the source of truth for Encode.
+func TestCmapSubtableParsing(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	repoRoot := filepath.Join(filepath.Dir(file), "..", "..")
+	path := filepath.Join(repoRoot, "data", "fonts", "noto", "NotoSans-VF.ttf")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Skipf("fixture missing: %v", err)
+	}
+	m, err := Decode(raw)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	var cmap *pb.CmapTable
+	for _, tb := range m.File.GetSfnt().Tables {
+		if tb.Tag == "cmap" {
+			cmap = tb.GetCmap()
+			break
+		}
+	}
+	if cmap == nil || len(cmap.EncodingRecords) == 0 {
+		t.Fatal("no cmap table or no encoding records")
+	}
+	seenFormats := map[uint32]bool{}
+	for i, r := range cmap.EncodingRecords {
+		seenFormats[r.SubtableFormat] = true
+		switch r.SubtableFormat {
+		case 4:
+			f4 := r.GetFormat4()
+			if f4 == nil {
+				t.Errorf("record %d: format 4 not wired", i)
+				break
+			}
+			segCount := int(f4.SegCountX2 / 2)
+			if len(f4.EndCode) != segCount || len(f4.StartCode) != segCount ||
+				len(f4.IdDelta) != segCount || len(f4.IdRangeOffset) != segCount {
+				t.Errorf("record %d fmt4 segment array mismatch: end=%d start=%d delta=%d range=%d want %d",
+					i, len(f4.EndCode), len(f4.StartCode), len(f4.IdDelta), len(f4.IdRangeOffset), segCount)
+			}
+			if segCount > 0 && f4.EndCode[segCount-1] != 0xFFFF {
+				t.Errorf("record %d fmt4 last endCode=%#x want 0xFFFF", i, f4.EndCode[segCount-1])
+			}
+		case 12:
+			f12 := r.GetFormat12()
+			if f12 == nil {
+				t.Errorf("record %d: format 12 not wired", i)
+				break
+			}
+			if len(f12.Groups) == 0 {
+				t.Errorf("record %d fmt12 has no groups", i)
+			}
+			for j, g := range f12.Groups {
+				if g.EndCharCode < g.StartCharCode {
+					t.Errorf("record %d fmt12 group %d: end<start", i, j)
+				}
+			}
+		case 0, 6, 10, 13, 14:
+			// Just confirm something was wired for these rarer formats when present.
+			if r.GetParsedSubtable() == nil {
+				t.Errorf("record %d: format %d body not wired", i, r.SubtableFormat)
+			}
+		}
+	}
+	if !seenFormats[4] {
+		t.Error("expected at least one format-4 subtable in NotoSans-VF")
+	}
+}
+
 func TestDetectFlavor(t *testing.T) {
 	cases := []struct {
 		name string

@@ -154,15 +154,14 @@ message NameRecord {
   string decoded = 7;
 }
 
-// ---------------- cmap [OT §5.cmap] (directory only) -------------
+// ---------------- cmap [OT §5.cmap] ------------------------------
 message CmapTable {
   uint32 version = 1;
   uint32 num_encoding_records = 2;
   repeated CmapEncodingRecord encoding_records = 3;
-  // Subtable bodies as opaque bytes indexed by subtable offset; lets
-  // Encode re-emit the exact bytes without re-encoding every cmap
-  // subtable format. Structured parsers for format 4/6/10/12/13/14
-  // are a future addition.
+  // Subtable bodies as opaque bytes indexed by subtable offset. These
+  // are the source of truth for round-trip; the structured
+  // `parsed_subtable` on each encoding record is advisory.
   map<uint32, bytes> subtable_bodies = 4;
 }
 
@@ -171,6 +170,119 @@ message CmapEncodingRecord {
   uint32 encoding_id = 2;
   uint32 subtable_offset = 3;
   uint32 subtable_format = 4; // observed from the first 2 bytes of subtable
+
+  // Structured view of the subtable at `subtable_offset`. Populated by
+  // the decoder for recognised formats (0, 4, 6, 10, 12, 13, 14);
+  // unrecognised formats leave this unset and keep bytes in
+  // CmapTable.subtable_bodies. Encode re-emits from subtable_bodies
+  // regardless, so editing these fields does NOT round-trip.
+  oneof parsed_subtable {
+    CmapSubtableFormat0  format0  = 5;
+    CmapSubtableFormat4  format4  = 6;
+    CmapSubtableFormat6  format6  = 7;
+    CmapSubtableFormat10 format10 = 8;
+    CmapSubtableFormat12 format12 = 9;
+    CmapSubtableFormat13 format13 = 10;
+    CmapSubtableFormat14 format14 = 11;
+  }
+}
+
+// Format 0: byte encoding (legacy — 256 glyph IDs in an array).
+message CmapSubtableFormat0 {
+  uint32 length = 1;
+  uint32 language = 2;
+  bytes  glyph_id_array = 3; // exactly 256 bytes
+}
+
+// Format 4: segment mapping to delta values (BMP workhorse).
+message CmapSubtableFormat4 {
+  uint32 length = 1;
+  uint32 language = 2;
+  uint32 seg_count_x2 = 3;
+  uint32 search_range = 4;
+  uint32 entry_selector = 5;
+  uint32 range_shift = 6;
+  // Each slice has `seg_count_x2 / 2` entries.
+  repeated uint32 end_code = 7;
+  repeated uint32 start_code = 8;
+  repeated int32  id_delta = 9;         // signed
+  repeated uint32 id_range_offset = 10;
+  // Remainder of the subtable: glyph indices referenced by id_range_offset.
+  repeated uint32 glyph_id_array = 11;
+}
+
+// Format 6: trimmed table mapping.
+message CmapSubtableFormat6 {
+  uint32 length = 1;
+  uint32 language = 2;
+  uint32 first_code = 3;
+  uint32 entry_count = 4;
+  repeated uint32 glyph_id_array = 5;
+}
+
+// Format 10: trimmed array (32-bit characters).
+message CmapSubtableFormat10 {
+  uint32 length = 1;
+  uint32 language = 2;
+  uint32 start_char_code = 3;
+  uint32 num_chars = 4;
+  repeated uint32 glyph_id_array = 5;
+}
+
+// Format 12: segmented coverage (32-bit characters, sequential).
+message CmapSubtableFormat12 {
+  uint32 length = 1;
+  uint32 language = 2;
+  repeated CmapSequentialMapGroup groups = 3;
+}
+
+message CmapSequentialMapGroup {
+  uint32 start_char_code = 1;
+  uint32 end_char_code = 2;
+  uint32 start_glyph_id = 3;
+}
+
+// Format 13: many-to-one range mappings (last-resort fonts).
+message CmapSubtableFormat13 {
+  uint32 length = 1;
+  uint32 language = 2;
+  repeated CmapConstantMapGroup groups = 3;
+}
+
+message CmapConstantMapGroup {
+  uint32 start_char_code = 1;
+  uint32 end_char_code = 2;
+  uint32 glyph_id = 3; // applies to every code point in the range
+}
+
+// Format 14: Unicode Variation Sequences.
+message CmapSubtableFormat14 {
+  uint32 length = 1;
+  repeated CmapVariationSelector var_selectors = 2;
+}
+
+message CmapVariationSelector {
+  uint32 var_selector = 1;                       // 24-bit VS code point
+  CmapDefaultUVS default_uvs = 2;                // optional
+  CmapNonDefaultUVS non_default_uvs = 3;         // optional
+}
+
+message CmapDefaultUVS {
+  repeated CmapUnicodeRange ranges = 1;
+}
+
+message CmapUnicodeRange {
+  uint32 start_unicode_value = 1; // 24-bit
+  uint32 additional_count = 2;    // extra code points beyond start
+}
+
+message CmapNonDefaultUVS {
+  repeated CmapUVSMapping mappings = 1;
+}
+
+message CmapUVSMapping {
+  uint32 unicode_value = 1; // 24-bit
+  uint32 glyph_id = 2;
 }
 
 // ---------------- hmtx [OT §5.hmtx] ------------------------------
