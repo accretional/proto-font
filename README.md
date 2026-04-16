@@ -248,6 +248,31 @@ FULL_CORPUS=1 go test ./internal/metadata/...   -run FullCorpus
 
 The default `./test.sh` skips `data/fonts/gfonts/` so CI stays fast.
 
+## UI validation samples
+
+`ui-e2e-validation/` renders every font under `data/fonts/` with
+`@font-face` in headless Chrome (via
+[accretional/chromerpc](https://github.com/accretional/chromerpc)) and
+screenshots the page. Committed reference renders for the three Noto
+variable-font fixtures:
+
+| Family               | Sample                                                      |
+| -------------------- | ----------------------------------------------------------- |
+| Noto Sans VF         | ![Noto Sans VF](docs/screenshots/NotoSans-VF.png)           |
+| Noto Sans Mono VF    | ![Noto Sans Mono VF](docs/screenshots/NotoSansMono-VF.png)  |
+| Noto Serif VF        | ![Noto Serif VF](docs/screenshots/NotoSerif-VF.png)         |
+
+Regenerate with:
+
+```sh
+# Start chromerpc (sibling repo) then:
+UI_E2E=1 go test ./ui-e2e-validation/...
+```
+
+Each automation textproto sets a 1280×800 viewport at `device_scale_factor=2`,
+navigates to the generated sample page, waits 500 ms for `@font-face` to
+resolve, and writes a full-page PNG. See `ui-e2e-validation/README.md`.
+
 ## NEXT STEPS
 
 Findings and known gaps surfaced while building the codec / schema.
