@@ -321,8 +321,16 @@ Append as new work comes up.
 - **`lang` data files**: we vendor the schema, not the `.textproto` data.
   If `gfapi` gains a "fonts covering language X" helper we need to pull
   the data.
-- **Handwritten fixtures**: `data/fonts/handwritten/` is empty. Candidates:
-  a TTC from `font-test-data`, a WOFF with metadata-XML, an EOT.
+- **Handwritten fixtures** *(seeded — five non-TTF samples now committed under
+  `data/fonts/handwritten/`)*: `TestOTF.otf`, `TestTTC.ttc`, `TestWOFF.woff`,
+  `TestWOFF2.woff2` from
+  [fonttools](https://github.com/fonttools/fonttools/tree/main/Tests/ttx/data)
+  (MIT) and `fontawesome-webfont.eot` from
+  [Font Awesome 4](https://github.com/FortAwesome/Font-Awesome/tree/4.x/fonts)
+  (font OFL-1.1, code MIT) — they exercise the OTF, TTC, WOFF1, WOFF2, and
+  EOT decode paths byte-exact. Future additions: a WOFF with metadata-XML,
+  a real-world `Source Han` TTC, a colour-table sample (`COLR`/`CPAL`
+  Bungee or Twemoji).
 - **Font Bakery parity**: we don't run Font Bakery in CI; the validation
   suite only checks byte-exact round-trip + `head.magicNumber`. Wiring in
   `fontbakery check-googlefonts` on the Noto fixtures would catch codec
