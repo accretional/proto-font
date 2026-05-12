@@ -7,10 +7,9 @@ The results live in `chrome-testing/screenshots/` and the best ones go into
 
 ## Setup
 
-Pull the `testing/` folder from
+Pull the `chrome-testing/` folder from
 [accretional/chromerpc](https://github.com/accretional/chromerpc) and place it
-in this repo as `chrome-testing/`. You only need that folder and not the whole
-repo.
+in this repo. You only need that folder and not the whole repo.
 
 ## Generating HTML samples
 
@@ -24,8 +23,8 @@ Run the script to generate the HTML files.
 
 Run `chrome-testing/snap.sh` against the directory of HTML files you just
 generated. It will produce one PNG per file and open them for you to inspect.
-The script handles everything — Chrome, the server, the gRPC layer — you just
-point it at the HTML directory and an output directory.
+You just have to point it at the HTML directory and an output directory. Check
+out `chrome-testing/USAGE_INSTRUCTIONS.md` for details
 
 ## Validation
 
