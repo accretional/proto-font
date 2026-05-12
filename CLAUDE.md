@@ -11,12 +11,11 @@ sessions.
 - Never run `go test ./...` or `go build ./...` directly for CI-style
   validation — use the scripts.
 - Before committing or pushing: `./LET_IT_RIP.sh` must pass.
-- `./LET_IT_RIP.sh` also re-renders e2e screenshots into `screenshots/`
-  (top-level dir). It auto-builds and starts headless `chromerpc` from
-  `../chromerpc` if needed. Skip with `SKIP_SCREENSHOTS=1`. After the run,
-  `git diff -- screenshots/` and visually open every changed PNG — diffs
-  are expected when you add a fixture or change a codec/render path, but
-  you must confirm the rendering still looks right before pushing.
+- `./LET_IT_RIP.sh` also re-renders screenshots into `chrome-testing/screenshots/`
+  via `chrome-testing/gen_html.sh` + `chrome-testing/snap.sh`. Skip with
+  `SKIP_SCREENSHOTS=1`. After the run, visually open every changed PNG — diffs
+  are expected when you add a fixture or change a codec/render path, but you
+  must confirm the rendering still looks right before pushing.
 - WOFF2 decode landed (header + variable-length directory + brotli
   decompress + per-table data on `Woff2TableDirectoryEntry`). `glyf`/`loca`
   remain in transformed form — see `transformed`/`transform_length` and
@@ -84,9 +83,8 @@ sessions.
 - `testing/fuzz/` — `go test -fuzz` targets over the decoder.
 - `testing/benchmarks/` — `Benchmark*` functions run across `data/fonts`.
   Also gated by `FULL_CORPUS=1` for the big sweep.
-- `ui-e2e-validation/` — generates per-font HTML samples + chromerpc
-  automation textprotos; opt-in `UI_E2E=1` + a running chromerpc server
-  drives headless Chrome screenshots.
+- `chrome-testing/` — bash script (`gen_html.sh`) generates per-font HTML
+  samples; `snap.sh` drives headless Chrome screenshots. Run by `LET_IT_RIP.sh`.
 
 ## Documentation outputs
 

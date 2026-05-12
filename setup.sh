@@ -22,7 +22,8 @@ esac
 log "go: $GO_VERSION"
 
 command -v protoc >/dev/null 2>&1 || die "protoc not found in PATH; install protoc"
-log "protoc: $(protoc --version)"
+PROTOC="$(command -v protoc)"
+log "protoc: $("$PROTOC" --version)"
 
 GOBIN="$(go env GOBIN)"
 if [ -z "$GOBIN" ]; then
@@ -172,7 +173,7 @@ if [ "$needs_regen" -eq 1 ]; then
   rm -f "$OF_GEN_DIR"/*.pb.go
   rm -rf "$ROOT/gen/go/googlefonts"
   # openformat protos
-  protoc \
+  "$PROTOC" \
     --proto_path="$PROTO_SRC_DIR" \
     --go_out="$ROOT" \
     --go_opt=module=openformat \
@@ -181,7 +182,7 @@ if [ "$needs_regen" -eq 1 ]; then
   # merged). We generate file-by-file because file paths land under
   # gen/go/googlefonts/<name>/ per file.
   if [ ${#GF_PROTOS[@]} -gt 0 ]; then
-    protoc \
+    "$PROTOC" \
       --proto_path="$PROTO_SRC_DIR" \
       --go_out="$ROOT" \
       --go_opt=module=openformat \

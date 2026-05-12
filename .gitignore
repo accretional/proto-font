@@ -39,9 +39,9 @@ data/fonts/colr/
 data/metadata/
 *.tmp
 
-# ui-e2e-validation screenshot output
-ui-e2e-validation/out/
-ui-e2e-validation/screenshots/
+# chrome-testing generated files (rebuilt by gen_html.sh + snap.sh)
+chrome-testing/html/
+chrome-testing/screenshots/
 
 # Claude Code session artefacts
 .claude/

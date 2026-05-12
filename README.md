@@ -217,8 +217,8 @@ See `AGENTS.md` / `CLAUDE.md` for the ground rules. Quick map:
 - `data/fonts/` — fixtures; `noto/` is fetched by `setup.sh`,
   `gfonts/` is the opt-in full corpus, `handwritten/` is checked in.
 - `testing/` — validation, fuzz, benchmarks.
-- `ui-e2e-validation/` — generates per-font HTML samples + chromerpc
-  automation textprotos; drives headless Chrome under `UI_E2E=1`.
+- `chrome-testing/` — bash script (`gen_html.sh`) generates per-font HTML
+  samples; `snap.sh` drives headless Chrome screenshots. Run by `LET_IT_RIP.sh`.
 - `docs/` — TL;DRs for the FAQ, contributor guide, per-repo notes.
 
 ## Build / test
@@ -250,40 +250,37 @@ The default `./test.sh` skips `data/fonts/gfonts/` so CI stays fast.
 
 ## UI validation samples
 
-`ui-e2e-validation/` renders every font under `data/fonts/` with
-`@font-face` in headless Chrome (via
-[accretional/chromerpc](https://github.com/accretional/chromerpc)) and
-screenshots the page. Committed reference renders:
+`chrome-testing/gen_html.sh` walks `data/fonts/`, generates one sample page
+per font, and `chrome-testing/snap.sh` drives headless Chrome (via
+[accretional/chromerpc](https://github.com/accretional/chromerpc)) to
+screenshot each page. Run automatically by `./LET_IT_RIP.sh`.
 
-| Family               | Sample                                                      |
-| -------------------- | ----------------------------------------------------------- |
-| Noto Sans VF         | ![Noto Sans VF](screenshots/NotoSans-VF.png)           |
-| Noto Sans Mono VF    | ![Noto Sans Mono VF](screenshots/NotoSansMono-VF.png)  |
-| Noto Serif VF        | ![Noto Serif VF](screenshots/NotoSerif-VF.png)         |
-| Material Symbols Outlined | ![Material Symbols Outlined](screenshots/MaterialSymbolsOutlined-VF.png) |
-| Material Symbols Rounded  | ![Material Symbols Rounded](screenshots/MaterialSymbolsRounded-VF.png)  |
-| Material Symbols Sharp    | ![Material Symbols Sharp](screenshots/MaterialSymbolsSharp-VF.png)      |
-| Bungee Color (COLRv0)| ![Bungee Color](screenshots/BungeeColor-Regular.png)   |
-| Bungee Spice (COLRv1)| ![Bungee Spice](screenshots/BungeeSpice-Regular.png)   |
-| TestOTF (fonttools)  | ![TestOTF](screenshots/TestOTF.png)                    |
-| TestWOFF (fonttools) | ![TestWOFF](screenshots/TestWOFF.png)                  |
-| TestWOFF2 (fonttools)| ![TestWOFF2](screenshots/TestWOFF2.png)                |
+| Family                              | Sample                                                                                                           |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Noto Sans VF                        | ![NotoSans-VF](chrome-testing/screenshots/NotoSans-VF.png)                                                      |
+| Noto Sans Mono VF                   | ![NotoSansMono-VF](chrome-testing/screenshots/NotoSansMono-VF.png)                                              |
+| Noto Serif VF                       | ![NotoSerif-VF](chrome-testing/screenshots/NotoSerif-VF.png)                                                    |
+| Material Symbols Outlined (TTF)     | ![MaterialSymbolsOutlined-VF truetype](chrome-testing/screenshots/MaterialSymbolsOutlined-VF_truetype.png)      |
+| Material Symbols Outlined (WOFF2)   | ![MaterialSymbolsOutlined-VF woff2](chrome-testing/screenshots/MaterialSymbolsOutlined-VF_woff2.png)            |
+| Material Symbols Rounded            | ![MaterialSymbolsRounded-VF](chrome-testing/screenshots/MaterialSymbolsRounded-VF.png)                          |
+| Material Symbols Sharp              | ![MaterialSymbolsSharp-VF](chrome-testing/screenshots/MaterialSymbolsSharp-VF.png)                              |
+| Bungee Color (COLRv0)               | ![BungeeColor-Regular](chrome-testing/screenshots/BungeeColor-Regular.png)                                      |
+| Bungee Spice (COLRv1)               | ![BungeeSpice-Regular](chrome-testing/screenshots/BungeeSpice-Regular.png)                                      |
+| TestOTF (opentype)                  | ![TestOTF](chrome-testing/screenshots/TestOTF.png)                                                              |
+| TestWOFF (woff)                     | ![TestWOFF](chrome-testing/screenshots/TestWOFF.png)                                                            |
+| TestWOFF2 (woff2)                   | ![TestWOFF2](chrome-testing/screenshots/TestWOFF2.png)                                                          |
 
-(`.ttc` and `.eot` are skipped — browsers don't load them via
-`@font-face`.)
+(`.ttc` and `.eot` are skipped — browsers don't load them via `@font-face`.)
 
 Regenerate with:
 
 ```sh
-# Start chromerpc (sibling repo) then:
-UI_E2E=1 go test ./ui-e2e-validation/...
-# To keep the PNGs (instead of in t.TempDir):
-UI_E2E=1 SCREENSHOT_OUT_DIR=docs/screenshots go test ./ui-e2e-validation/...
+bash chrome-testing/gen_html.sh
+bash chrome-testing/snap.sh chrome-testing/html/ chrome-testing/screenshots/
 ```
 
-Each automation textproto sets a 1280×800 viewport at `device_scale_factor=2`,
-navigates to the generated sample page, waits 500 ms for `@font-face` to
-resolve, and writes a full-page PNG. See `ui-e2e-validation/README.md`.
+Each page sets a 1280×800 viewport at `device_scale_factor=2`, waits 500 ms
+for `@font-face` to resolve, and writes a full-page PNG.
 
 ## NEXT STEPS
 
