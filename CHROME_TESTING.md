@@ -22,7 +22,7 @@ Run the script to generate the HTML files.
 ## Taking screenshots
 
 Run `chrome-testing/snap.sh` against the directory of HTML files you just
-generated. It will produce one PNG per file and open them for you to inspect.
+generated. It will produce the screenshots of the html files as one PNG per file. 
 You just have to point it at the HTML directory and an output directory. Check
 out `chrome-testing/USAGE_INSTRUCTIONS.md` for details
 
