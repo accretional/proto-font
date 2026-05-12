@@ -41,7 +41,6 @@ data/metadata/
 
 # chrome-testing generated files (rebuilt by gen_html.sh + snap.sh)
 chrome-testing/html/
-chrome-testing/screenshots/
 
 # Claude Code session artefacts
 .claude/
